@@ -200,26 +200,48 @@ elif [ $mode == "Trojan" ]; then
     fi
    fi
 ifaces=$(ip r|grep default|awk '{print $3}')
+  # Resolve all IPv4 addresses of CDN/Host/SNI for bulletproof anti-loop routing in Global Mode
+  cdn_ips=$(python3 -c "
+import socket
+targets = ['$host', '$sni']
+ips = set()
+for t in targets:
+    if t:
+        try:
+            for item in socket.getaddrinfo(t, 0, socket.AF_INET):
+                ips.add(item[4][0])
+        except Exception:
+            pass
+print(' '.join(ips))
+" 2>/dev/null)
+  if [ -z "$cdn_ips" ]; then
+    cdn_ips="$host"
+  fi
  if [ ! -f $(echo $ifaces|awk -F "." '{print $2}') ]; then
    if [ $(echo $ifaces|awk -F "." '{print $4}'|wc -c) != "2" ]; then
   ipg=$(ip r|grep default|awk '{print $3}');ifaces=$(ip r|grep default|awk '{print $5}')
-  ip route add $host dev $ifaces via $ipg 2>/dev/null
-  if [ -n "$sni" ] && [ "$sni" != "$host" ]; then ip route add $sni dev $ifaces via $ipg 2>/dev/null; fi
+  for cip in $cdn_ips; do
+    ip route add $cip dev $ifaces via $ipg 2>/dev/null
+  done
   ip route add $hostt dev $ifaces via $ipg 2>/dev/null
   ip route add $hostv dev $ifaces via $ipg 2>/dev/null
   ip route add 8.8.8.8 $ifaces via $ipg 2>/dev/null
   route del default;ip route add default dev $ifaces via $ipg metric 1 2>/dev/null
   else
-  type=gw;route add $host $type $ifaces 2>/dev/null
-  if [ -n "$sni" ] && [ "$sni" != "$host" ]; then route add $sni $type $ifaces 2>/dev/null; fi
+  type=gw
+  for cip in $cdn_ips; do
+    route add $cip $type $ifaces 2>/dev/null
+  done
   route add $hostt $type $ifaces 2>/dev/null
   route add $hostv $type $ifaces 2>/dev/null
   route add 8.8.8.8 $type $ifaces 2>/dev/null
   route del default;route add default $type $ifaces metric 1 2>/dev/null
    fi
  else
-  type=dev;route add $host $type $ifaces 2>/dev/null
-  if [ -n "$sni" ] && [ "$sni" != "$host" ]; then route add $sni $type $ifaces 2>/dev/null; fi
+  type=dev
+  for cip in $cdn_ips; do
+    route add $cip $type $ifaces 2>/dev/null
+  done
   route add $hostt $type $ifaces 2>/dev/null
   route add $hostv $type $ifaces 2>/dev/null
   route add 8.8.8.8 $type $ifaces 2>/dev/null
@@ -256,7 +278,23 @@ kill $(ps w|grep badvpn|grep tun|awk "NR==1"|awk '{print $1}') 2>/dev/null
   hostv=$(grep vmess: /var/vmess2.txt 2>/dev/null|awk -F "//" '{print $2}'|base64 -d 2>/dev/null|sed ':a;N;$!ba;s/\n  //g'|awk -F '"add' '{print $2}'|grep :|sed ':a;N;$!ba;s/\n/ /g'|awk -F ',' '{print $1}'|sed -e 's/://g' -e 's/ //g' -e 's/"//g')
   hostt=$(grep trojan:// /var/trojan2.txt|awk -F "://" '{print $2}'|awk -F "@" '{print $2}'|awk -F ":" '{print $1}'|awk "NR==1")
   fi
-route del $host 2>/dev/null;route del $hostt 2>/dev/null;route del $hostv 2>/dev/null;route del 8.8.8.8 2>/dev/null
+for cip in $(python3 -c "
+import socket
+targets = ['$host', '$(grep sni= config.txt 2>/dev/null|awk -F '=' '{print \$2}')']
+ips = set()
+for t in targets:
+    if t:
+        try:
+            for item in socket.getaddrinfo(t, 0, socket.AF_INET):
+                ips.add(item[4][0])
+        except Exception:
+            pass
+print(' '.join(ips))
+" 2>/dev/null) $host; do
+  route del $cip 2>/dev/null
+  ip route del $cip 2>/dev/null
+done
+route del $hostt 2>/dev/null;route del $hostv 2>/dev/null;route del 8.8.8.8 2>/dev/null
 flush_firewall
 killall -q badvpn-udpgw 2>/dev/null
 screen -d -m ip link delete tun0 2>/dev/null;screen -d -m ip link delete tun1 2>/dev/null
@@ -1519,19 +1557,19 @@ echo -e "{$(date +%M:%S)} Menjalankan SSH Client (latarbelakang)...." >> screenl
 rm -rf /root/.ssh/known_hosts* /www/xderm/log/screenlog.0;cd /www/xderm/log 2>/dev/null
 screen -L -dmS xderm sshpass -p "$pass" ssh -oTCPKeepAlive=yes -oServerAliveInterval=180 -oServerAliveCountMax=2 -oStrictHostKeyChecking=no -CND 127.0.0.1:1080 -p $port $user@$host -o "Proxycommand=corkscrew 127.0.0.1 8789 %h %p"
 sleep 2;n=0;xxx="lanjut";echo -ne "{$(date +%M:%S)} Menguji Koneksi... " >> ../screenlog.0
-while [ $n != 7 ]; do
+while [ $n -lt 15 ]; do
  if [ ! -f $(grep Permission screenlog.0 2>/dev/null|awk "NR==1"|awk '{print $4}') ]; then
      cd /www/xderm;echo "Not Connect!" >> screenlog.0
      echo -e '<pre><h2 style="color:#006400" "text-overflow:ellipsis">Username/Password Salah/Kadaluarsa.</h2></pre>' >> screenlog.0
      flushx;echo -e "{$(date +%M:%S)} Berhenti." >> screenlog.0
      exit
  fi
-r=$(curl -m4 88.198.46.60 -w "%{http_code}" --proxy socks5://127.0.0.1:1080 -s -o /dev/null|head -c2)
+r=$(curl -m5 88.198.46.60 -w "%{http_code}" --proxy socks5://127.0.0.1:1080 -s -o /dev/null|head -c2)
   if [ "$r" == "30" ] || [ "$r" == "20" ]; then
   echo '<pre><h2 style="color:#006400" "text-overflow:ellipsis">HTTP/1.1 200 OK</h2></pre>' >> ../screenlog.0
   xxx="no";break
   fi
-((n++));sleep 1
+((n++));sleep 2
 done
 if [ "$xxx" == "lanjut" ]; then
  cd /www/xderm;echo "Not Connect!" >> screenlog.0

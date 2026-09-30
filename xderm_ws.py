@@ -77,7 +77,7 @@ def load_config_file(filepath: str) -> dict:
     with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
         return parse_config_text(f.read())
 
-def read_http_response(sock, buffer_size=4096, timeout=10):
+def read_http_response(sock, buffer_size=4096, timeout=30):
     """
     Read HTTP response until header boundary (\r\n\r\n).
     Returns (status_code: int, extra_body_bytes: bytes).
@@ -144,7 +144,7 @@ class WSTunnelHandler(threading.Thread):
             # 1. Connect TCP to remote target
             self.log(f"Menghubungkan ke {target_host}:{target_port}...")
             remote_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            remote_sock.settimeout(10)
+            remote_sock.settimeout(30)
             remote_sock.connect((target_host, target_port))
 
             # 2. TLS wrap if port 443 or TLS enabled
@@ -161,8 +161,8 @@ class WSTunnelHandler(threading.Thread):
             self.log("Mengirim HTTP WebSocket Upgrade Payload...")
             remote_sock.sendall(formatted_payload.encode("utf-8"))
 
-            # 4. Read HTTP Response from Server
-            status_code, extra_bytes = read_http_response(remote_sock, timeout=10)
+            # 4. Read HTTP Response from Server (allow up to 30s for Origin cold-start)
+            status_code, extra_bytes = read_http_response(remote_sock, timeout=30)
             self.log(f"Respons CDN: HTTP {status_code}")
 
             if status_code not in (101, 200):

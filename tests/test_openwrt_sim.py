@@ -65,7 +65,7 @@ class TestOpenWrtSimulation(unittest.TestCase):
 
         try:
             # 1. Simulate Corkscrew ProxyCommand
-            corkscrew_client = socket.create_connection(('127.0.0.1', local_port), timeout=10)
+            corkscrew_client = socket.create_connection(('127.0.0.1', local_port), timeout=35)
             connect_cmd = f"CONNECT {self.config['host']}:{self.config['port']} HTTP/1.0\r\n\r\n"
             corkscrew_client.sendall(connect_cmd.encode())
 
@@ -77,7 +77,7 @@ class TestOpenWrtSimulation(unittest.TestCase):
             corkscrew_client.sendall(b"SSH-2.0-OpenSSH_9.0p1_OpenWrt_aarch64\r\n")
 
             # 4. Read server response (SSH banner or MaxStartups)
-            corkscrew_client.settimeout(10)
+            corkscrew_client.settimeout(35)
             server_banner = corkscrew_client.recv(512)
             print(f"\n[OpenWrt Sim] Remote SSH Response via WebSocket: {server_banner.decode(errors='ignore').strip()}")
 
@@ -110,8 +110,9 @@ class TestOpenWrtSimulation(unittest.TestCase):
         self.assertIn("--udpgw-remote-server-addr 127.0.0.1:$pudp", content)
         self.assertIn("--udpgw-transparent-dns", content)
 
-        # 4. Anti-loop WAN routing for SNI
-        self.assertIn('ip route add $sni dev $ifaces via $ipg', content)
+        # 4. Anti-loop WAN routing for CDN Anycast IPs
+        self.assertIn('cdn_ips=', content)
+        self.assertIn('ip route add $cip dev $ifaces via $ipg', content)
 
     def test_nftables_firewall4_support(self):
         """Verify xderm-mini script supports modern OpenWrt fw4 (nftables)."""
