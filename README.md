@@ -62,7 +62,7 @@ Jalankan perintah berikut di terminal OpenWrt:
 
 ```bash
 opkg update
-opkg install badvpn-tun2socks coreutils-base64 coreutils-timeout httping \
+opkg install kmod-tun badvpn-tun2socks coreutils-base64 coreutils-timeout httping \
   v2ray-core corkscrew procps-ng-ps git curl sshpass openssh-client \
   openssl-util https-dns-proxy python3 python3-pip
 ```

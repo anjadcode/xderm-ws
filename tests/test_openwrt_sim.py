@@ -30,8 +30,8 @@ class TestOpenWrtSimulation(unittest.TestCase):
         self.assertEqual(self.config.get('host'), 'dz1wsoabehhmc.cloudfront.net')
         self.assertEqual(self.config.get('port'), '443')
         self.assertEqual(self.config.get('sni'), 'dz1wsoabehhmc.cloudfront.net')
-        self.assertEqual(self.config.get('user'), 'danaelssh-afipah')
-        self.assertEqual(self.config.get('pass'), 'afipah')
+        self.assertEqual(self.config.get('user'), 'xxxx')
+        self.assertEqual(self.config.get('pass'), 'xxxx')
         self.assertIn('Upgrade: websocket', self.config.get('payload', ''))
         self.assertEqual(self.config.get('mode'), 'SSH-WS.')
 

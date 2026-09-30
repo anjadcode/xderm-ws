@@ -1,3 +1,7 @@
 #!/bin/bash
-wget -O /www/xderm/xderm-mini https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main/xderm-mini -q
-wget -O /www/xderm/index.php https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main/index.php -q
+url="https://raw.githubusercontent.com/anjadcode/xderm-ws/main"
+wget -O /www/xderm/xderm-mini $url/xderm-mini -q
+chmod +x /www/xderm/xderm-mini
+wget -O /www/xderm/xderm_ws.py $url/xderm_ws.py -q
+chmod +x /www/xderm/xderm_ws.py
+wget -O /www/xderm/index.php $url/index.php -q

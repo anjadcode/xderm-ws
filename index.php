@@ -832,12 +832,12 @@ mode=SSH-WS.
 
   if (isset($_POST['button7'])) {
     echo '<div style="color:#fbbf24; margin:10px 0;">Reinstalling files...</div>';
-    exec('wget -O /www/xderm/index.html https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main/index.html -q');
-    exec('wget -O /www/xderm/xderm-mini https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main/xderm-mini -q');
-    exec('wget -O /www/xderm/xderm_ws.py https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main/xderm_ws.py -q');
+    exec('wget -O /www/xderm/index.html https://raw.githubusercontent.com/anjadcode/xderm-ws/main/index.html -q');
+    exec('wget -O /www/xderm/xderm-mini https://raw.githubusercontent.com/anjadcode/xderm-ws/main/xderm-mini -q');
+    exec('wget -O /www/xderm/xderm_ws.py https://raw.githubusercontent.com/anjadcode/xderm-ws/main/xderm_ws.py -q');
     exec('chmod +x /www/xderm/xderm-mini /www/xderm/xderm_ws.py');
-    exec('wget -O /www/xderm/js/jquery-2.1.3.min.js https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main/jquery-2.1.3.min.js -q');
-    exec('wget -O /www/xderm/index.php https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main/index.php -q');
+    exec('wget -O /www/xderm/js/jquery-2.1.3.min.js https://raw.githubusercontent.com/anjadcode/xderm-ws/main/jquery-2.1.3.min.js -q');
+    exec('wget -O /www/xderm/index.php https://raw.githubusercontent.com/anjadcode/xderm-ws/main/index.php -q');
     echo '<div style="color:#10b981; margin:10px 0;">Reinstall selesai! Silahkan refresh halaman.</div>';
   }
 ?>

@@ -32,8 +32,8 @@ class TestXdermWSInjector(unittest.TestCase):
 host=dz1wsoabehhmc.cloudfront.net
 port=443
 pudp=7300
-user=danaelssh-afipah
-pass=afipah
+user=xxxx
+pass=xxxx
 sni=dz1wsoabehhmc.cloudfront.net
 payload=GET / HTTP/1.1[crlf]Host: dz1wsoabehhmc.cloudfront.net[crlf]Upgrade: websocket[crlf][crlf]
 mode=SSH-WS.
@@ -41,8 +41,8 @@ mode=SSH-WS.
         cfg = xderm_ws.parse_config_text(sample_config)
         self.assertEqual(cfg.get('host'), 'dz1wsoabehhmc.cloudfront.net')
         self.assertEqual(cfg.get('port'), '443')
-        self.assertEqual(cfg.get('user'), 'danaelssh-afipah')
-        self.assertEqual(cfg.get('pass'), 'afipah')
+        self.assertEqual(cfg.get('user'), 'xxxx')
+        self.assertEqual(cfg.get('pass'), 'xxxx')
         self.assertEqual(cfg.get('sni'), 'dz1wsoabehhmc.cloudfront.net')
         self.assertEqual(cfg.get('payload'), 'GET / HTTP/1.1[crlf]Host: dz1wsoabehhmc.cloudfront.net[crlf]Upgrade: websocket[crlf][crlf]')
         self.assertEqual(cfg.get('mode'), 'SSH-WS.')
@@ -53,14 +53,14 @@ Host: dz1wsoabehhmc.cloudfront.net
 Port: 443
 Payload: GET / HTTP/1.1[crlf]Host: dz1wsoabehhmc.cloudfront.net[crlf]Upgrade: websocket[crlf][crlf]
 SNI: dz1wsoabehhmc.cloudfront.net
-User: danaelssh-afipah
-Pass: afipah
+User: xxxx
+Pass: xxxx
 """
         cfg = xderm_ws.parse_config_text(sample_colon_config)
         self.assertEqual(cfg.get('host'), 'dz1wsoabehhmc.cloudfront.net')
         self.assertEqual(cfg.get('port'), '443')
-        self.assertEqual(cfg.get('user'), 'danaelssh-afipah')
-        self.assertEqual(cfg.get('pass'), 'afipah')
+        self.assertEqual(cfg.get('user'), 'xxxx')
+        self.assertEqual(cfg.get('pass'), 'xxxx')
         self.assertEqual(cfg.get('sni'), 'dz1wsoabehhmc.cloudfront.net')
 
     def test_websocket_handshake_parsing(self):

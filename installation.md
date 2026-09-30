@@ -13,7 +13,7 @@ Jalankan perintah berikut di terminal OpenWrt:
 
 ```bash
 opkg update
-opkg install badvpn-tun2socks coreutils-base64 coreutils-timeout httping \
+opkg install kmod-tun badvpn-tun2socks coreutils-base64 coreutils-timeout httping \
   v2ray-core corkscrew procps-ng-ps git curl sshpass openssh-client \
   openssl-util https-dns-proxy python3 python3-pip
 ```
@@ -52,7 +52,7 @@ python3 -m pip install requests beautifulsoup4
 1. Bersihkan instalasi lama (jika ada) dan clone repositori ini:
    ```bash
    rm -rf /www/xderm
-   git clone https://github.com/ryanfauzi1/xderm-mini_GUI /www/xderm
+   git clone https://github.com/anjadcode/xderm-ws /www/xderm
    ```
 
 2. Berikan izin eksekusi (*executable permissions*) pada skrip utama:

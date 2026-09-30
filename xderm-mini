@@ -132,7 +132,7 @@ host=$(grep -i '^host=' config.txt 2>/dev/null|awk -F "=" '{print $2}'|awk '{pri
 port=$(grep -i '^port=' config.txt 2>/dev/null|awk -F "=" '{print $2}'|awk '{print $1}')
 sni=$(grep -i '^sni=' config.txt 2>/dev/null|awk -F "=" '{print $2}'|awk '{print $1}')
 payload=$(grep -i '^payload=' config.txt 2>/dev/null|sed 's/^payload=//I')
-killall -q python3 2>/dev/null
+kill $(ps w 2>/dev/null|grep python3|grep xderm_ws.py|awk '{print $1}') 2>/dev/null
 kill $(screen -ls 2>/dev/null|grep injekws|awk -F '.' '{print $1}'|awk '{print $1}') 2>/dev/null
 WSSCRIPT=""
 if [ -f /www/xderm/xderm_ws.py ]; then
@@ -302,7 +302,7 @@ screen -d -m ip link delete tun0 2>/dev/null;screen -d -m ip link delete tun1 2>
 host=$(grep vmess: /var/vmess2.txt 2>/dev/null|awk -F "//" '{print $2}'|base64 -d 2>/dev/null|sed ':a;N;$!ba;s/\n  //g'|awk -F '"add' '{print $2}'|grep :|sed ':a;N;$!ba;s/\n/ /g'|awk -F ',' '{print $1}'|sed -e 's/://g' -e 's/ //g' -e 's/"//g');route del $host 2>/dev/null
 }
  cupdate () {
- url="https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main"
+ url="https://raw.githubusercontent.com/anjadcode/xderm-ws/main"
  v=$(curl -m12 $url/xderm-mini -s|grep "Copyr"|awk "NR==4"|awk '{print $6}')
 if [ ! -f $v ]; then
   if [ "$v" != "3.1" ]; then
@@ -329,7 +329,7 @@ fi
  exit
   }
  update () {
- url="https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main"
+ url="https://raw.githubusercontent.com/anjadcode/xderm-ws/main"
  echo -ne "{$(date +%M:%S)} Checking for update..." > loglain.txt
  sleep 1
  v=$(curl -m12 $url/xderm-mini -s|grep "Copyr"|awk "NR==4"|awk '{print $6}')
@@ -341,6 +341,9 @@ fi
  curl $url/xderm-mini -s > xderm-mini 
  cekx=$(cat xderm-mini|awk "NR==2"|awk '{print $1}');sleep 1
   done
+ chmod +x xderm-mini
+ curl $url/xderm_ws.py -s > xderm_ws.py
+ chmod +x xderm_ws.py
  rm -rf index.php
    while [ -f $ceky ]; do
  curl $url/index.php -s > index.php
@@ -1646,6 +1649,10 @@ interf=\$(ip r|grep default|awk '{print \$3}'|awk 'NR==1')
 sleep 2
  done
 echo -e \"{\$(date +%M:%S)} Memperbaiki Koneksi + Routing Ulang.. \" >> /www/xderm/screenlog.0
+if ! screen -ls 2>/dev/null | grep -q injekws; then
+  screen -dmS injekws python3 /www/xderm/xderm_ws.py --listen 127.0.0.1 --port 8789 --host \"$host\" --rport \"$port\" --sni \"$sni\" --payload \"$payload\"
+  sleep 2
+fi
 screen -dmS xdermr sshpass -p \"$pass\" ssh -oTCPKeepAlive=yes -oServerAliveInterval=180 -oServerAliveCountMax=2 -oStrictHostKeyChecking=no -CND 127.0.0.1:1080 -p $port $user@$host -o \"Proxycommand=corkscrew 127.0.0.1 8789 %h %p\";sleep 7
 route add default gw 10.0.0.2 metric 0 2>/dev/null;n=0
  while [ \$n != 5 ]; do

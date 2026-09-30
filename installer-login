@@ -1,5 +1,5 @@
 #!/bin/bash
-url="https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main"
+url="https://raw.githubusercontent.com/anjadcode/xderm-ws/main"
 wget -O /www/xderm/login.php $url/login.php -q
 wget -O /www/xderm/header.php $url/header.php -q
 echo -e "user=admin\npasswd=xderm" > /root/auth.txt
