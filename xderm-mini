@@ -146,7 +146,13 @@ elif [ -f "./xderm_ws.py" ]; then
 fi
 if [ -n "$WSSCRIPT" ]; then
   mkdir -p /www/xderm/log 2>/dev/null
-  screen -dmS injekws python3 "$WSSCRIPT" --listen 127.0.0.1 --port 8789 --host "$host" --rport "$port" --sni "$sni" --payload "$payload" --log-file /www/xderm/log/ws.log
+  if command -v screen >/dev/null 2>&1; then
+    HOME=/root TERM=xterm screen -dmS injekws python3 "$WSSCRIPT" --listen 127.0.0.1 --port 8789 --host "$host" --rport "$port" --sni "$sni" --payload "$payload" --log-file /www/xderm/log/ws.log
+  fi
+  sleep 0.5
+  if ! pgrep -f "xderm_ws.py" >/dev/null 2>&1; then
+    nohup python3 "$WSSCRIPT" --listen 127.0.0.1 --port 8789 --host "$host" --rport "$port" --sni "$sni" --payload "$payload" --log-file /www/xderm/log/ws.log >/dev/null 2>&1 &
+  fi
 fi
 }
  set_firewall () {
@@ -1504,7 +1510,13 @@ echo "  Port UDPgw: $pudp" >> screenlog.0
 echo "##############################################" >> screenlog.0
 echo -e "{$(date +%M:%S)} Menjalankan SSH Client (latarbelakang)...." >> screenlog.0
 rm -rf /root/.ssh/known_hosts* /www/xderm/log/screenlog.0;cd /www/xderm/log 2>/dev/null
-screen -L -dmS xderm sshpass -p "$pass" ssh -oTCPKeepAlive=yes -oServerAliveInterval=25 -oServerAliveCountMax=3 -oStrictHostKeyChecking=no -CND 127.0.0.1:1080 -p $port $user@$host -o "Proxycommand=corkscrew 127.0.0.1 8789 %h %p"
+if command -v screen >/dev/null 2>&1; then
+  HOME=/root TERM=xterm screen -L -Logfile screenlog.0 -dmS xderm sshpass -p "$pass" ssh -oTCPKeepAlive=yes -oServerAliveInterval=25 -oServerAliveCountMax=3 -oStrictHostKeyChecking=no -CND 127.0.0.1:1080 -p $port $user@$host -o "Proxycommand=corkscrew 127.0.0.1 8789 %h %p"
+fi
+sleep 1
+if ! pgrep -f "Proxycommand=corkscrew 127.0.0.1 8789" >/dev/null 2>&1; then
+  nohup sshpass -p "$pass" ssh -oTCPKeepAlive=yes -oServerAliveInterval=25 -oServerAliveCountMax=3 -oStrictHostKeyChecking=no -CND 127.0.0.1:1080 -p $port $user@$host -o "Proxycommand=corkscrew 127.0.0.1 8789 %h %p" > screenlog.0 2>&1 &
+fi
 sleep 2;n=0;xxx="lanjut";echo -ne "{$(date +%M:%S)} Menguji Koneksi... " >> ../screenlog.0
 while [ $n -lt 15 ]; do
  if [ ! -f $(grep Permission screenlog.0 2>/dev/null|awk "NR==1"|awk '{print $4}') ]; then

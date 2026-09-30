@@ -109,6 +109,19 @@ class TestWebUI(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(log_dir, 'st')))
         self.assertTrue(os.path.exists(os.path.join(log_dir, '.gitkeep')))
 
+    def test_log_endpoint_and_assets(self):
+        """Verify get_log AJAX handler and asset directories (js/, img/) exist."""
+        self.assertIn("['action'] === 'get_log'", self.content)
+        self.assertIn("fetchActiveLog", self.content)
+        self.assertIn("chmod 666 screenlog.0", self.content)
+
+        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        js_file = os.path.join(repo_root, 'js', 'jquery-2.1.3.min.js')
+        self.assertTrue(os.path.isfile(js_file))
+
+        img_file = os.path.join(repo_root, 'img', 'image.png')
+        self.assertTrue(os.path.isfile(img_file))
+
 if __name__ == '__main__':
     unittest.main()
 

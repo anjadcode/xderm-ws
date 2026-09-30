@@ -26,6 +26,7 @@
   // AJAX handler for clearing log
   if (isset($_POST['action']) && $_POST['action'] === 'clear_log') {
     exec("echo > screenlog.0");
+    exec("chmod 666 screenlog.0 2>/dev/null");
     echo "OK";
     exit;
   }
@@ -33,7 +34,26 @@
   // AJAX handler for clearing WS log
   if (isset($_POST['action']) && $_POST['action'] === 'clear_ws_log') {
     exec("echo > log/ws.log 2>/dev/null");
+    exec("chmod 666 log/ws.log 2>/dev/null");
     echo "OK";
+    exit;
+  }
+
+  // AJAX handler for getting real-time logs
+  if ((isset($_GET['action']) && $_GET['action'] === 'get_log') || (isset($_POST['action']) && $_POST['action'] === 'get_log')) {
+    header('Content-Type: text/plain; charset=UTF-8');
+    header('Cache-Control: no-cache, no-store, must-revalidate');
+    $type = isset($_REQUEST['type']) ? $_REQUEST['type'] : 'sys';
+    $file = ($type === 'ws') ? 'log/ws.log' : 'screenlog.0';
+    if (file_exists($file)) {
+      readfile($file);
+    } else if ($type === 'sys' && file_exists('/www/xderm/screenlog.0')) {
+      readfile('/www/xderm/screenlog.0');
+    } else if ($type === 'ws' && file_exists('/www/xderm/log/ws.log')) {
+      readfile('/www/xderm/log/ws.log');
+    } else {
+      echo "";
+    }
     exit;
   }
 
@@ -98,6 +118,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="shortcut icon" href="img/ico.png">
 <script type="text/javascript" src="js/jquery-2.1.3.min.js"></script>
+<script type="text/javascript">
+if (typeof jQuery === 'undefined') {
+  document.write('<script type="text/javascript" src="jquery-2.1.3.min.js"><\/script>');
+}
+</script>
 <meta charset="UTF-8"><title>Xderm Mini</title>
 <style>
 		body {
@@ -420,6 +445,11 @@ function syncRawToForm() {
   if (document.getElementById("f_pass")) document.getElementById("f_pass").value = cfg["pass"] || "";
   if (document.getElementById("f_pudp")) document.getElementById("f_pudp").value = cfg["pudp"] || "7300";
   if (document.getElementById("f_payload")) document.getElementById("f_payload").value = cfg["payload"] || "";
+  if (cfg["mode"] && document.getElementById("idmode")) {
+    var m = cfg["mode"];
+    if (m.slice(-1) !== '.') m += '.';
+    document.getElementById("idmode").value = m;
+  }
 }
 
 var activeLogTab = "sys";
@@ -454,20 +484,59 @@ function copyLog() {
   }
 }
 
+function updateLogContent(result) {
+  var el = $("#log");
+  if (el.length && result !== undefined) {
+    el.html(result);
+    if ($("#chk_autoscroll").length === 0 || $("#chk_autoscroll").is(":checked")) {
+      var textarea = document.getElementById("log");
+      if (textarea) textarea.scrollTop = textarea.scrollHeight;
+    }
+  }
+}
+
+function updateStatusFromLog(result) {
+  var badge = $("#status_badge");
+  if (badge.length && result) {
+    if (result.indexOf("HTTP/1.1 200 OK") !== -1 || result.indexOf("Terhubung") !== -1 || result.indexOf("Sukses") !== -1) {
+      badge.attr("class", "badge badge-connected").text("● Connected");
+      pingTick++;
+      if (pingTick % 4 === 0) {
+        checkPing();
+      }
+    } else if (result.indexOf("Menjalankan") !== -1 || result.indexOf("Menguji") !== -1 || result.indexOf("Menghubungkan") !== -1) {
+      badge.attr("class", "badge badge-connecting").text("● Connecting...");
+      $("#ping_badge").text("⚡ ...").css({ "color": "#fbbf24", "border-color": "#374151" });
+    } else {
+      badge.attr("class", "badge badge-disconnected").text("● Disconnected");
+      $("#ping_badge").text("⚡ -- ms").css({ "color": "#9ca3af", "border-color": "#374151" });
+    }
+  }
+}
+
 function fetchActiveLog() {
-  var targetUrl = (activeLogTab === "ws") ? "log/ws.log" : "screenlog.0";
+  var logType = (activeLogTab === "ws") ? "ws" : "sys";
   $.ajax({
-    url: targetUrl,
+    url: "index.php?action=get_log&type=" + logType,
     cache: false,
     success: function(result) {
-      var el = $("#log");
-      if (el.length) {
-        el.html(result);
-        if ($("#chk_autoscroll").length === 0 || $("#chk_autoscroll").is(":checked")) {
-          var textarea = document.getElementById("log");
-          if (textarea) textarea.scrollTop = textarea.scrollHeight;
-        }
+      updateLogContent(result);
+      if (logType === "sys") {
+        updateStatusFromLog(result);
       }
+    },
+    error: function() {
+      var fallbackUrl = (logType === "ws") ? "log/ws.log" : "screenlog.0";
+      $.ajax({
+        url: fallbackUrl,
+        cache: false,
+        success: function(fallbackResult) {
+          updateLogContent(fallbackResult);
+          if (logType === "sys") {
+            updateStatusFromLog(fallbackResult);
+          }
+        }
+      });
     }
   });
 }
@@ -515,59 +584,9 @@ function switchQuickProfile(prof) {
 <script type="text/javascript">
     var pingTick = 0;
     $(document).ready(function() {
+        fetchActiveLog();
         setInterval(function() {
-            // 1. Fetch system status from screenlog.0
-            $.ajax({
-                url: "screenlog.0",
-                cache: false,
-                success: function(result) {
-                    if (activeLogTab === "sys") {
-                        var el = $("#log");
-                        if (el.length) {
-                            el.html(result);
-                            if ($("#chk_autoscroll").length === 0 || $("#chk_autoscroll").is(":checked")) {
-                                var textarea = document.getElementById("log");
-                                if (textarea) textarea.scrollTop = textarea.scrollHeight;
-                            }
-                        }
-                    }
-                    // Update Status Badge dynamically
-                    var badge = $("#status_badge");
-                    if (badge.length) {
-                        if (result.indexOf("HTTP/1.1 200 OK") !== -1 || result.indexOf("Terhubung") !== -1 || result.indexOf("Sukses") !== -1) {
-                            badge.attr("class", "badge badge-connected").text("● Connected");
-                            pingTick++;
-                            if (pingTick % 4 === 0) {
-                                checkPing();
-                            }
-                        } else if (result.indexOf("Menjalankan") !== -1 || result.indexOf("Menguji") !== -1 || result.indexOf("Menghubungkan") !== -1) {
-                            badge.attr("class", "badge badge-connecting").text("● Connecting...");
-                            $("#ping_badge").text("⚡ ...").css({ "color": "#fbbf24", "border-color": "#374151" });
-                        } else {
-                            badge.attr("class", "badge badge-disconnected").text("● Disconnected");
-                            $("#ping_badge").text("⚡ -- ms").css({ "color": "#9ca3af", "border-color": "#374151" });
-                        }
-                    }
-                }
-            });
-
-            // 2. If WS Engine tab is active, fetch log/ws.log
-            if (activeLogTab === "ws") {
-                $.ajax({
-                    url: "log/ws.log",
-                    cache: false,
-                    success: function(ws_result) {
-                        var el = $("#log");
-                        if (el.length) {
-                            el.html(ws_result);
-                            if ($("#chk_autoscroll").length === 0 || $("#chk_autoscroll").is(":checked")) {
-                                var textarea = document.getElementById("log");
-                                if (textarea) textarea.scrollTop = textarea.scrollHeight;
-                            }
-                        }
-                    }
-                });
-            }
+            fetchActiveLog();
         }, 1000);
     });
     $(document).ready(function() {
@@ -665,20 +684,44 @@ if (file_exists($filename)) {
     if ($action === 'Start') {
       exec('killall -q xderm-mini');
       exec('echo > screenlog.0');
+      exec('chmod 666 screenlog.0 2>/dev/null');
       exec('chmod +x ' . $xderm_bin);
-      exec('screen -L -dmS gua ' . $xderm_bin . ' start');
+      $has_screen = trim(exec('which screen 2>/dev/null'));
+      if ($has_screen) {
+        exec('HOME=/root TERM=xterm screen -L -Logfile screenlog.0 -dmS gua ' . $xderm_bin . ' start 2>/dev/null');
+        usleep(200000);
+        $running = trim(exec('pgrep -f "' . basename($xderm_bin) . ' start" 2>/dev/null'));
+        if (!$running) {
+          exec('nohup ' . $xderm_bin . ' start >> screenlog.0 2>&1 &');
+        }
+      } else {
+        exec('nohup ' . $xderm_bin . ' start >> screenlog.0 2>&1 &');
+      }
       exec('echo Stop > log/st');
       render_log_controls();
-      echo "<div id='log' class='terminal-box'></div>";
+      $init_log = file_exists('screenlog.0') ? htmlspecialchars(file_get_contents('screenlog.0')) : '';
+      echo "<div id='log' class='terminal-box'>" . $init_log . "</div>";
       echo '<script>document.getElementById("strp").value="Stop"; document.getElementById("strp").className="btn btn-stop";</script>';
     } else {
       exec('killall -q xderm-mini');
       exec('echo > screenlog.0');
+      exec('chmod 666 screenlog.0 2>/dev/null');
       exec('chmod +x ' . $xderm_bin);
-      exec('screen -L -dmS gu ' . $xderm_bin . ' stop');
+      $has_screen = trim(exec('which screen 2>/dev/null'));
+      if ($has_screen) {
+        exec('HOME=/root TERM=xterm screen -L -Logfile screenlog.0 -dmS gu ' . $xderm_bin . ' stop 2>/dev/null');
+        usleep(200000);
+        $running = trim(exec('pgrep -f "' . basename($xderm_bin) . ' stop" 2>/dev/null'));
+        if (!$running) {
+          exec('nohup ' . $xderm_bin . ' stop >> screenlog.0 2>&1 &');
+        }
+      } else {
+        exec('nohup ' . $xderm_bin . ' stop >> screenlog.0 2>&1 &');
+      }
       exec('echo Start > log/st');
       render_log_controls();
-      echo "<div id='log' class='terminal-box'></div>";
+      $init_log = file_exists('screenlog.0') ? htmlspecialchars(file_get_contents('screenlog.0')) : '';
+      echo "<div id='log' class='terminal-box'>" . $init_log . "</div>";
       echo '<script>document.getElementById("strp").value="Start"; document.getElementById("strp").className="btn btn-start";</script>';
     }
   }
@@ -687,11 +730,22 @@ if (file_exists($filename)) {
     $xderm_bin = file_exists('/www/xderm/xderm-mini') ? '/www/xderm/xderm-mini' : './xderm-mini';
     exec('killall -q xderm-mini');
     exec('chmod +x ' . $xderm_bin);
-    exec('screen -L -dmS upd ' . $xderm_bin . ' update');
-    echo "<div id='loglain' class='terminal-box'></div>";
+    $has_screen = trim(exec('which screen 2>/dev/null'));
+    if ($has_screen) {
+      exec('HOME=/root TERM=xterm screen -L -Logfile loglain.txt -dmS upd ' . $xderm_bin . ' update 2>/dev/null');
+      usleep(200000);
+      $running = trim(exec('pgrep -f "' . basename($xderm_bin) . ' update" 2>/dev/null'));
+      if (!$running) {
+        exec('nohup ' . $xderm_bin . ' update >> loglain.txt 2>&1 &');
+      }
+    } else {
+      exec('nohup ' . $xderm_bin . ' update >> loglain.txt 2>&1 &');
+    }
+    echo "<div id='loglain' class='terminal-box'>Memeriksa pembaruan...</div>";
   }
 
   if (isset($_POST['simpan'])) {
+    $xderm_bin = file_exists('/www/xderm/xderm-mini') ? '/www/xderm/xderm-mini' : './xderm-mini';
     $config = isset($_POST['configbox']) ? $_POST['configbox'] : '';
     $conf = isset($_POST['profile']) ? $_POST['profile'] : 'config1';
     $use_stunnel = isset($_POST['use_stunnel']) ? $_POST['use_stunnel'] : 'no';
@@ -723,10 +777,9 @@ if (file_exists($filename)) {
     exec('echo "\''.$conf.'\' Menjadi default Config. !" >> loglain.txt');
     
     $use_boot = isset($_POST['use_boot']) ? $_POST['use_boot'] : 'no';
-    if ($use_boot <> 'yes' ){ exec('./xderm-mini disable'); }
-    else { exec('./xderm-mini enable'); }
-    render_log_controls();
-    echo "<div id='loglain' class='terminal-box'></div>";
+    if ($use_boot <> 'yes' ){ exec($xderm_bin . ' disable'); }
+    else { exec($xderm_bin . ' enable'); }
+    echo "<div id='loglain' class='terminal-box'>Config telah di update.\n'".$conf."' Menjadi default Config. !</div>";
   }
 
   if (isset($_POST['button5'])) {
@@ -911,7 +964,8 @@ mode=SSH-WS.
   } else {
     if (!isset($_POST['button5']) && !isset($_POST['simpan']) && !isset($_POST['button6']) && !isset($_POST['button7']) && !isset($_POST['button4']) && !isset($_POST['button1'])) {
       render_log_controls();
-      echo "<div id='log' class='terminal-box'></div>";
+      $init_log = file_exists('screenlog.0') ? htmlspecialchars(file_get_contents('screenlog.0')) : '';
+      echo "<div id='log' class='terminal-box'>" . $init_log . "</div>";
     }
   }
 
