@@ -104,6 +104,28 @@ def read_http_response(sock, buffer_size=4096, timeout=30):
     finally:
         sock.settimeout(old_timeout)
 
+def write_log(msg: str, log_file: str = "", verbose: bool = True):
+    """Log formatted timestamped message to stdout and optional rotated log file."""
+    ts = time.strftime("%H:%M:%S")
+    formatted = f"[{ts}] [WS] {msg}"
+    if verbose:
+        print(formatted, flush=True)
+    if log_file:
+        try:
+            # Check log file size for rotation (max 100KB, retain last 200 lines)
+            if os.path.exists(log_file) and os.path.getsize(log_file) > 102400:
+                with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
+                    lines = f.readlines()
+                with open(log_file, "w", encoding="utf-8") as f:
+                    f.writelines(lines[-200:])
+            log_dir = os.path.dirname(os.path.abspath(log_file))
+            if log_dir and not os.path.exists(log_dir):
+                os.makedirs(log_dir, exist_ok=True)
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(formatted + "\n")
+        except Exception:
+            pass
+
 class WSTunnelHandler(threading.Thread):
     def __init__(self, client_sock, client_addr, config, verbose=True):
         super(WSTunnelHandler, self).__init__()
@@ -111,13 +133,12 @@ class WSTunnelHandler(threading.Thread):
         self.client_addr = client_addr
         self.config = config
         self.verbose = verbose
+        self.log_file = self.config.get("log_file", "")
         self.daemon = True
         self.buffer_size = 65535
 
     def log(self, msg):
-        if self.verbose:
-            ts = time.strftime("%H:%M:%S")
-            print(f"[{ts}] [WS] {msg}", flush=True)
+        write_log(msg, log_file=self.log_file, verbose=self.verbose)
 
     def run(self):
         remote_sock = None
@@ -243,6 +264,7 @@ def main():
     parser.add_argument("--rport", help="Remote port (80 or 443)", type=int, default=0)
     parser.add_argument("--sni", help="Server Name Indication (SNI)", default="")
     parser.add_argument("--payload", help="Custom payload template", default="")
+    parser.add_argument("--log-file", help="Path to write log file", default="")
     parser.add_argument("--quiet", "-q", help="Quiet mode", action="store_true")
 
     args = parser.parse_args()
@@ -260,6 +282,8 @@ def main():
         cfg["sni"] = args.sni
     if args.payload:
         cfg["payload"] = args.payload
+    if args.log_file:
+        cfg["log_file"] = args.log_file
 
     if "port" not in cfg:
         cfg["port"] = "443"

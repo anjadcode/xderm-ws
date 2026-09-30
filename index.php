@@ -21,6 +21,13 @@ ceklogin();
     exit;
   }
 
+  // AJAX handler for clearing WS log
+  if (isset($_POST['action']) && $_POST['action'] === 'clear_ws_log') {
+    exec("echo > log/ws.log 2>/dev/null");
+    echo "OK";
+    exit;
+  }
+
   // AJAX handler for ping latency check
   if ((isset($_GET['action']) && $_GET['action'] === 'ping') || (isset($_POST['action']) && $_POST['action'] === 'ping')) {
     header('Content-Type: application/json');
@@ -58,6 +65,22 @@ ceklogin();
       echo json_encode(['status' => 'error', 'message' => 'Invalid profile']);
     }
     exit;
+  }
+
+  function render_log_controls() {
+    echo '<div class="log-controls" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:4px;">
+            <div style="display:flex; gap:4px;">
+              <button type="button" id="tab_log_sys" class="tab-btn active" style="padding:2px 8px; font-size:11px;" onclick="switchLogTab(\'sys\')">Log Sistem</button>
+              <button type="button" id="tab_log_ws" class="tab-btn" style="padding:2px 8px; font-size:11px;" onclick="switchLogTab(\'ws\')">Log WS Engine</button>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <label style="font-size:11px; color:#9ca3af; display:flex; align-items:center; gap:3px; cursor:pointer;">
+                <input type="checkbox" id="chk_autoscroll" checked> Auto-scroll
+              </label>
+              <button type="button" id="btn_clear_log" class="btn-log-action" onclick="clearLog()">Clear</button>
+              <button type="button" class="btn-log-action" onclick="copyLog()">Copy</button>
+            </div>
+          </div>';
   }
 ?>
 <!DOCTYPE html>
@@ -390,8 +413,23 @@ function syncRawToForm() {
   if (document.getElementById("f_payload")) document.getElementById("f_payload").value = cfg["payload"] || "";
 }
 
+var activeLogTab = "sys";
+
+function switchLogTab(tab) {
+  activeLogTab = tab;
+  if (tab === "sys") {
+    $("#tab_log_sys").addClass("active");
+    $("#tab_log_ws").removeClass("active");
+  } else {
+    $("#tab_log_sys").removeClass("active");
+    $("#tab_log_ws").addClass("active");
+  }
+  fetchActiveLog();
+}
+
 function clearLog() {
-  $.post("index.php", { action: "clear_log" }, function() {
+  var act = (activeLogTab === "ws") ? "clear_ws_log" : "clear_log";
+  $.post("index.php", { action: act }, function() {
     if (document.getElementById("log")) document.getElementById("log").innerHTML = "";
     if (document.getElementById("loglain")) document.getElementById("loglain").innerHTML = "";
   });
@@ -405,6 +443,24 @@ function copyLog() {
       alert("Log berhasil disalin ke clipboard!");
     });
   }
+}
+
+function fetchActiveLog() {
+  var targetUrl = (activeLogTab === "ws") ? "log/ws.log" : "screenlog.0";
+  $.ajax({
+    url: targetUrl,
+    cache: false,
+    success: function(result) {
+      var el = $("#log");
+      if (el.length) {
+        el.html(result);
+        if ($("#chk_autoscroll").length === 0 || $("#chk_autoscroll").is(":checked")) {
+          var textarea = document.getElementById("log");
+          if (textarea) textarea.scrollTop = textarea.scrollHeight;
+        }
+      }
+    }
+  });
 }
 
 function checkPing() {
@@ -451,15 +507,20 @@ function switchQuickProfile(prof) {
     var pingTick = 0;
     $(document).ready(function() {
         setInterval(function() {
+            // 1. Fetch system status from screenlog.0
             $.ajax({
                 url: "screenlog.0",
                 cache: false,
                 success: function(result) {
-                    var el = $("#log");
-                    if (el.length) {
-                        el.html(result);
-                        var textarea = document.getElementById("log");
-                        if (textarea) textarea.scrollTop = textarea.scrollHeight;
+                    if (activeLogTab === "sys") {
+                        var el = $("#log");
+                        if (el.length) {
+                            el.html(result);
+                            if ($("#chk_autoscroll").length === 0 || $("#chk_autoscroll").is(":checked")) {
+                                var textarea = document.getElementById("log");
+                                if (textarea) textarea.scrollTop = textarea.scrollHeight;
+                            }
+                        }
                     }
                     // Update Status Badge dynamically
                     var badge = $("#status_badge");
@@ -480,6 +541,24 @@ function switchQuickProfile(prof) {
                     }
                 }
             });
+
+            // 2. If WS Engine tab is active, fetch log/ws.log
+            if (activeLogTab === "ws") {
+                $.ajax({
+                    url: "log/ws.log",
+                    cache: false,
+                    success: function(ws_result) {
+                        var el = $("#log");
+                        if (el.length) {
+                            el.html(ws_result);
+                            if ($("#chk_autoscroll").length === 0 || $("#chk_autoscroll").is(":checked")) {
+                                var textarea = document.getElementById("log");
+                                if (textarea) textarea.scrollTop = textarea.scrollHeight;
+                            }
+                        }
+                    }
+                });
+            }
         }, 1000);
     });
     $(document).ready(function() {
@@ -572,7 +651,7 @@ if (file_exists($filename)) {
       exec('chmod +x xderm-mini');
       exec('screen -L -dmS gua ./xderm-mini start');
       exec('echo Stop > log/st');
-      echo "<div class='log-controls'><button type='button' id='btn_clear_log' class='btn-log-action' onclick='clearLog()'>Clear</button><button type='button' class='btn-log-action' onclick='copyLog()'>Copy</button></div>";
+      render_log_controls();
       echo "<div id='log' class='terminal-box'></div>";
       echo '<script>document.getElementById("strp").value="Stop"; document.getElementById("strp").className="btn btn-stop";</script>';
     } else {
@@ -581,7 +660,7 @@ if (file_exists($filename)) {
       exec('chmod +x xderm-mini');
       exec('screen -L -dmS gu ./xderm-mini stop');
       exec('echo Start > log/st');
-      echo "<div class='log-controls'><button type='button' id='btn_clear_log' class='btn-log-action' onclick='clearLog()'>Clear</button><button type='button' class='btn-log-action' onclick='copyLog()'>Copy</button></div>";
+      render_log_controls();
       echo "<div id='log' class='terminal-box'></div>";
       echo '<script>document.getElementById("strp").value="Start"; document.getElementById("strp").className="btn btn-start";</script>';
     }
@@ -628,7 +707,7 @@ if (file_exists($filename)) {
     $use_boot = isset($_POST['use_boot']) ? $_POST['use_boot'] : 'no';
     if ($use_boot <> 'yes' ){ exec('./xderm-mini disable'); }
     else { exec('./xderm-mini enable'); }
-    echo "<div class='log-controls'><button type='button' id='btn_clear_log' class='btn-log-action' onclick='clearLog()'>Clear</button></div>";
+    render_log_controls();
     echo "<div id='loglain' class='terminal-box'></div>";
   }
 
@@ -813,7 +892,7 @@ mode=SSH-WS.
     echo '<script>syncRawToForm();</script>';
   } else {
     if (!isset($_POST['button5']) && !isset($_POST['simpan']) && !isset($_POST['button6']) && !isset($_POST['button7']) && !isset($_POST['button4']) && !isset($_POST['button1'])) {
-      echo "<div class='log-controls'><button type='button' id='btn_clear_log' class='btn-log-action' onclick='clearLog()'>Clear</button><button type='button' class='btn-log-action' onclick='copyLog()'>Copy</button></div>";
+      render_log_controls();
       echo "<div id='log' class='terminal-box'></div>";
     }
   }

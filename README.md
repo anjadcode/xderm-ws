@@ -10,7 +10,7 @@
     <img src="https://img.shields.io/badge/Architecture-aarch64__generic-emerald?style=flat-square" alt="Architecture aarch64"/>
     <img src="https://img.shields.io/badge/Firewall-nftables%20%2B%20iptables-orange?style=flat-square" alt="Firewall"/>
     <img src="https://img.shields.io/badge/Engine-Python%203%20Native-yellow?style=flat-square&logo=python" alt="Python Engine"/>
-    <img src="https://img.shields.io/badge/Tests-18%20Passed-brightgreen?style=flat-square" alt="Tests Passed"/>
+    <img src="https://img.shields.io/badge/Tests-19%20Passed-brightgreen?style=flat-square" alt="Tests Passed"/>
   </p>
 </p>
 
