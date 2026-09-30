@@ -1,9 +1,9 @@
 <?php
- exec("ls login.php|awk 'NR==1'|awk -F '.' '{print $1}'",$clo);
-  if ($clo[0]) {
-include 'header.php';
-ceklogin();
-  };
+  if (file_exists('login.php')) {
+    include 'header.php';
+    ceklogin();
+  }
+
 
   // Read active profile and mode for status header
   $active_prof = "config1";
@@ -674,13 +674,13 @@ if (file_exists($filename)) {
   }
 
   if (isset($_POST['simpan'])) {
-    $config = $_POST['configbox'];
-    $conf = $_POST['profile'];
+    $config = isset($_POST['configbox']) ? $_POST['configbox'] : '';
+    $conf = isset($_POST['profile']) ? $_POST['profile'] : 'config1';
     $use_stunnel = isset($_POST['use_stunnel']) ? $_POST['use_stunnel'] : 'no';
     $use_gotun = isset($_POST['use_gotun']) ? $_POST['use_gotun'] : 'no';
     $use_restfw = isset($_POST['use_restfw']) ? $_POST['use_restfw'] : 'no';
     $use_waitmodem = isset($_POST['use_waitmodem']) ? $_POST['use_waitmodem'] : 'no';
-    $mode = $_POST['mode'];
+    $mode = isset($_POST['mode']) ? $_POST['mode'] : 'SSH-WS.';
 
     $config = str_replace("\r", "", $config);
     exec('echo "'.$mode.'" > config/mode.default');

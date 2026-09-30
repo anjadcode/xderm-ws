@@ -1,18 +1,30 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 $show="home";
-exec('grep user /root/auth.txt |awk -F"=" \'{print $2}\'',$user);
-exec('grep passwd /root/auth.txt |awk -F"=" \'{print $2}\'',$pass);
-if ($_GET['login']) {
-     if ($_POST['username'] == $user[0]
-         && $_POST['password'] == $pass[0]) {
-         $_SESSION['loggedin'] = 1;
-         header("Location: index.php");
-         exit;
-     } else 
-echo '<script type="text/javascript">
+$auth_user = "admin";
+$auth_pass = "xderm";
+if (file_exists('/root/auth.txt')) {
+    exec('grep user /root/auth.txt |awk -F"=" \'{print $2}\'', $user);
+    exec('grep passwd /root/auth.txt |awk -F"=" \'{print $2}\'', $pass);
+    if (!empty($user[0])) { $auth_user = trim($user[0]); }
+    if (!empty($pass[0])) { $auth_pass = trim($pass[0]); }
+}
+
+if (!empty($_GET['login'])) {
+    $input_user = isset($_POST['username']) ? trim($_POST['username']) : '';
+    $input_pass = isset($_POST['password']) ? trim($_POST['password']) : '';
+    if ($input_user === $auth_user && $input_pass === $auth_pass) {
+        $_SESSION['loggedin'] = 1;
+        $_SESSION['LAST_ACTIVITY'] = time();
+        header("Location: index.php");
+        exit;
+    } else {
+        echo '<script type="text/javascript">
 alert("Username atau Password salah!");
 </script>';
+    }
 }
 echo '<!DOCTYPE>
 <html>

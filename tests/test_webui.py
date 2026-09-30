@@ -73,5 +73,29 @@ class TestWebUI(unittest.TestCase):
         trojan_lines = [line for line in sample_with_trojan.splitlines() if not re.search(filter_regex, line)]
         self.assertEqual(trojan_lines, ["trojan://pass@server:443"])
 
+    def test_php8_compatibility_header_and_login(self):
+        """Verify header.php and login.php do not access undefined array keys or fail redirect."""
+        header_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'header.php'))
+        with open(header_path, 'r', encoding='utf-8') as f:
+            header_src = f.read()
+
+        # header.php must not directly evaluate $_SESSION['loggedin'] without checking empty/isset
+        self.assertNotIn("($_SESSION['loggedin'] != 1)", header_src)
+        self.assertIn("empty($_SESSION['loggedin'])", header_src)
+        # header.php must terminate execution with exit; after header redirect
+        self.assertRegex(header_src, r'header\("Location:\s*login\.php"\);\s*exit;')
+
+        login_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'login.php'))
+        with open(login_path, 'r', encoding='utf-8') as f:
+            login_src = f.read()
+
+        # login.php must safely check $_GET['login']
+        self.assertNotIn("if ($_GET['login'])", login_src)
+        self.assertIn("!empty($_GET['login'])", login_src)
+
+        # index.php must use file_exists('login.php')
+        self.assertIn("file_exists('login.php')", self.content)
+
 if __name__ == '__main__':
     unittest.main()
+

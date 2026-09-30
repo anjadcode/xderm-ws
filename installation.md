@@ -35,12 +35,15 @@ python3 -m pip install requests beautifulsoup4
 
 > **Catatan Paket Arsitektur `aarch64_generic`:**
 > Repositori ini telah menyertakan paket biner pra-kompilasi ARM64:
-> - `corkscrew_2.0-Rureka.com_aarch64_cortex-a53.ipk`
+> - `corkscrew_2.0-Rureka.com_aarch64_generic.ipk` (untuk target `aarch64_generic`)
+> - `corkscrew_2.0-Rureka.com_aarch64_cortex-a53.ipk` (untuk target `aarch64_cortex-a53`)
 > - `trojan_aarch64_cortex-a53`
 >
 > Jika `corkscrew` belum tersedia dari repositori resmi opkg Anda, instal langsung dengan:
 > ```bash
-> opkg install /www/xderm/corkscrew_2.0-Rureka.com_aarch64_cortex-a53.ipk
+> opkg install /www/xderm/corkscrew_2.0-Rureka.com_aarch64_generic.ipk
+> # atau jika menggunakan paket cortex-a53 di firmware aarch64_generic:
+> # opkg install --force-architecture /www/xderm/corkscrew_2.0-Rureka.com_aarch64_cortex-a53.ipk
 > ```
 
 ---
