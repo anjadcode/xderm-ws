@@ -20,6 +20,45 @@ ceklogin();
     echo "OK";
     exit;
   }
+
+  // AJAX handler for ping latency check
+  if ((isset($_GET['action']) && $_GET['action'] === 'ping') || (isset($_POST['action']) && $_POST['action'] === 'ping')) {
+    header('Content-Type: application/json');
+    $start = microtime(true);
+    $fp = @fsockopen("1.1.1.1", 53, $errno, $errstr, 1.5);
+    if ($fp) {
+      $latency = round((microtime(true) - $start) * 1000);
+      fclose($fp);
+      echo json_encode(['status' => 'ok', 'latency' => $latency]);
+    } else {
+      echo json_encode(['status' => 'error', 'latency' => null]);
+    }
+    exit;
+  }
+
+  // AJAX handler for quick profile switcher
+  if (isset($_POST['action']) && $_POST['action'] === 'switch_profile') {
+    header('Content-Type: application/json');
+    $prof = isset($_POST['profile']) ? trim($_POST['profile']) : '';
+    if (preg_match('/^config[1-5]$/', $prof)) {
+      exec('echo "' . $prof . '" > config/default');
+      if (file_exists("config/$prof")) {
+        exec("cp config/$prof config.txt");
+        exec("grep -i '^mode=' config/$prof | awk -F '=' '{print $2}'", $m_out);
+        if (!empty($m_out[0])) {
+          $new_mode = trim($m_out[0]);
+          if (substr($new_mode, -1) !== '.') { $new_mode .= '.'; }
+          exec('echo "' . $new_mode . '" > config/mode.default');
+        }
+      }
+      exec("cat config/mode.default 2>/dev/null", $cur_m);
+      $m_label = !empty($cur_m[0]) ? trim(str_replace('.', '', $cur_m[0])) : 'SSH-WS';
+      echo json_encode(['status' => 'ok', 'profile' => $prof, 'mode' => $m_label]);
+    } else {
+      echo json_encode(['status' => 'error', 'message' => 'Invalid profile']);
+    }
+    exit;
+  }
 ?>
 <!DOCTYPE html>
 <html>
@@ -367,8 +406,49 @@ function copyLog() {
     });
   }
 }
+
+function checkPing() {
+  $.ajax({
+    url: "index.php?action=ping",
+    cache: false,
+    timeout: 2000,
+    success: function(res) {
+      var el = $("#ping_badge");
+      if (res && res.status === "ok" && res.latency !== null) {
+        var lat = res.latency;
+        el.text("⚡ " + lat + " ms");
+        if (lat < 100) {
+          el.css({ "color": "#34d399", "border-color": "#059669" });
+        } else if (lat < 250) {
+          el.css({ "color": "#fbbf24", "border-color": "#d97706" });
+        } else {
+          el.css({ "color": "#f87171", "border-color": "#dc2626" });
+        }
+      } else {
+        el.text("⚡ Timeout").css({ "color": "#f87171", "border-color": "#dc2626" });
+      }
+    },
+    error: function() {
+      $("#ping_badge").text("⚡ Timeout").css({ "color": "#f87171", "border-color": "#dc2626" });
+    }
+  });
+}
+
+function switchQuickProfile(prof) {
+  $.post("index.php", { action: "switch_profile", profile: prof }, function(res) {
+    if (res && res.status === "ok") {
+      $("#profile_badge").text("Profile: " + res.profile + " (" + res.mode + ")");
+      if (document.getElementById("idconf")) {
+        document.getElementById("idconf").value = prof;
+        shipping_calc();
+      }
+      $("#quick_msg").fadeIn(150).delay(1200).fadeOut(300);
+    }
+  });
+}
 </script>
 <script type="text/javascript">
+    var pingTick = 0;
     $(document).ready(function() {
         setInterval(function() {
             $.ajax({
@@ -386,10 +466,16 @@ function copyLog() {
                     if (badge.length) {
                         if (result.indexOf("HTTP/1.1 200 OK") !== -1 || result.indexOf("Terhubung") !== -1 || result.indexOf("Sukses") !== -1) {
                             badge.attr("class", "badge badge-connected").text("● Connected");
+                            pingTick++;
+                            if (pingTick % 4 === 0) {
+                                checkPing();
+                            }
                         } else if (result.indexOf("Menjalankan") !== -1 || result.indexOf("Menguji") !== -1 || result.indexOf("Menghubungkan") !== -1) {
                             badge.attr("class", "badge badge-connecting").text("● Connecting...");
+                            $("#ping_badge").text("⚡ ...").css({ "color": "#fbbf24", "border-color": "#374151" });
                         } else {
                             badge.attr("class", "badge badge-disconnected").text("● Disconnected");
+                            $("#ping_badge").text("⚡ -- ms").css({ "color": "#9ca3af", "border-color": "#374151" });
                         }
                     }
                 }
@@ -433,10 +519,32 @@ if (file_exists($filename)) {
 		<img src="img/image.png" style="max-width: 90%; height: auto;"></a>
 	</center>
 
-    <!-- Real-time Status Header -->
+    <!-- Real-time Status Header with Ping & Profile -->
     <div class="status-bar">
-      <span id="status_badge" class="badge badge-disconnected">● Disconnected</span>
-      <span class="badge badge-info">Profile: <?php echo htmlspecialchars($active_prof); ?> (<?php echo htmlspecialchars($active_mode); ?>)</span>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <span id="status_badge" class="badge badge-disconnected">● Disconnected</span>
+        <span id="ping_badge" class="badge" style="background:#111827; color:#9ca3af; border:1px solid #374151;">⚡ -- ms</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <span id="profile_badge" class="badge badge-info">Profile: <?php echo htmlspecialchars($active_prof); ?> (<?php echo htmlspecialchars($active_mode); ?>)</span>
+      </div>
+    </div>
+
+    <!-- Quick Profile Switcher Bar -->
+    <div style="display:flex; justify-content:space-between; align-items:center; background:#111827; border:1px solid #374151; border-radius:6px; padding:4px 10px; margin-bottom:10px; font-size:11px;">
+      <span style="color:#9ca3af; font-weight:600;">⚡ Quick Profile:</span>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <select id="quick_profile" class="input-field" style="width:auto; padding:2px 8px; font-size:11px;" onchange="switchQuickProfile(this.value)">
+          <?php
+            for ($qp = 1; $qp <= 5; $qp++) {
+              $qp_name = "config" . $qp;
+              $sel = ($active_prof === $qp_name) ? "selected" : "";
+              echo "<option value=\"$qp_name\" $sel>$qp_name</option>";
+            }
+          ?>
+        </select>
+        <span id="quick_msg" style="color:#10b981; font-size:10px; display:none;">Updated!</span>
+      </div>
     </div>
 
     <form method="post">

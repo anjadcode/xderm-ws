@@ -35,6 +35,16 @@ class TestWebUI(unittest.TestCase):
         self.assertIn('id="status_badge"', self.content)
         self.assertTrue('btn_clear_log' in self.content)
 
+    def test_webui_ping_latency_indicator(self):
+        """Verify real-time ping latency badge and AJAX endpoint exist."""
+        self.assertIn('id="ping_badge"', self.content)
+        self.assertIn("['action'] === 'ping'", self.content)
+
+    def test_webui_quick_profile_switcher(self):
+        """Verify quick profile switcher dropdown and AJAX handler exist."""
+        self.assertIn('id="quick_profile"', self.content)
+        self.assertIn("['action'] === 'switch_profile'", self.content)
+
     def test_config_serialization_preserves_payload(self):
         """Test regex sanitization does not drop or corrupt payload."""
         sample_config = (

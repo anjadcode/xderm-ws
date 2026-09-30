@@ -10,7 +10,7 @@
     <img src="https://img.shields.io/badge/Architecture-aarch64__generic-emerald?style=flat-square" alt="Architecture aarch64"/>
     <img src="https://img.shields.io/badge/Firewall-nftables%20%2B%20iptables-orange?style=flat-square" alt="Firewall"/>
     <img src="https://img.shields.io/badge/Engine-Python%203%20Native-yellow?style=flat-square&logo=python" alt="Python Engine"/>
-    <img src="https://img.shields.io/badge/Tests-16%20Passed-brightgreen?style=flat-square" alt="Tests Passed"/>
+    <img src="https://img.shields.io/badge/Tests-18%20Passed-brightgreen?style=flat-square" alt="Tests Passed"/>
   </p>
 </p>
 
@@ -41,6 +41,8 @@ Dibangun khusus untuk router dan STB OpenWrt arsitektur **`aarch64_generic`** (A
 - 🎮 **UDP Gateway untuk Gaming & Voice**:
   - Terintegrasi dengan `badvpn-tun2socks` (`--udpgw-remote-server-addr 127.0.0.1:7300` & `--udpgw-transparent-dns`) untuk game online (Mobile Legends, PUBG) dan panggilan suara.
 - 📱 **WebUI Minimalis & Mudah Digunakan**:
+  - **Quick Profile Switcher**: Ganti akun/server (config1 ~ config5) langsung dari dashboard utama dengan 1 klik tanpa harus masuk menu config.
+  - **Indikator Ping Real-Time**: Latensi koneksi internet (`⚡ 45 ms`) ditampilkan langsung di status bar.
   - **Form Editor Mode**: Input khusus Host, Port, SNI, Username, Password (dengan toggle 👁️), dan Payload.
   - **Tombol Preset 1-Klik**: Menyiapkan template payload CloudFront instan.
   - **Status Badge Real-Time**: Indikator koneksi langsung (`● Connected`, `● Connecting...`, `● Disconnected`).
