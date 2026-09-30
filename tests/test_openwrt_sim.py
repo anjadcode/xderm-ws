@@ -133,5 +133,32 @@ class TestOpenWrtSimulation(unittest.TestCase):
         self.assertIn("nft delete table inet xderm", content)
         self.assertIn('oifname "tun0" masquerade', content)
 
+    def test_badvpn_aarch64_binaries(self):
+        """Verify badvpn-tun2socks and badvpn-udpgw are native aarch64 binaries and valid ipk exists."""
+        root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        tun2socks_bin = os.path.join(root_dir, 'badvpn-tun2socks')
+        udpgw_bin = os.path.join(root_dir, 'badvpn-udpgw')
+        ipk_file = os.path.join(root_dir, 'badvpn_1.999.130-1_aarch64_generic.ipk')
+
+        self.assertTrue(os.path.isfile(tun2socks_bin), "badvpn-tun2socks missing")
+        self.assertTrue(os.path.isfile(udpgw_bin), "badvpn-udpgw missing")
+        self.assertTrue(os.path.isfile(ipk_file), "badvpn ipk missing")
+
+        # Verify ELF header: Class 2 (64-bit), Machine 183 (AArch64)
+        for binary in (tun2socks_bin, udpgw_bin):
+            with open(binary, 'rb') as f:
+                header = f.read(20)
+                self.assertEqual(header[:4], b'\x7fELF')
+                self.assertEqual(header[4], 2, "Must be 64-bit ELF")
+                machine = int.from_bytes(header[18:20], 'little')
+                self.assertEqual(machine, 183, "Must be AArch64 (ARM64)")
+
+        # Verify execution
+        import subprocess
+        res = subprocess.run([tun2socks_bin, '--help'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        self.assertEqual(res.returncode, 0)
+        self.assertIn("BadVPN tun2socks", res.stdout)
+
 if __name__ == '__main__':
     unittest.main()
+

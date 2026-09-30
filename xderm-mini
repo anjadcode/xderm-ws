@@ -1,4 +1,6 @@
 #!/bin/bash
+cd /www/xderm 2>/dev/null || cd "$(dirname "$0")" 2>/dev/null
+chmod +x /www/xderm/go-tun2socks /www/xderm/badvpn-tun2socks /www/xderm/badvpn-udpgw /www/xderm/trojan_aarch64_cortex-a53 /www/xderm/xderm-mini /www/xderm/xderm_ws.py 2>/dev/null
  injekpy () {
 sni=$(grep sni= config.txt|awk -F "=" '{print $2}')
 echo "#!/usr/bin/python
@@ -200,7 +202,13 @@ elif [ $mode == "Trojan" ]; then
      exit
     fi
    fi
-ifaces=$(ip r|grep default|awk '{print $3}')
+  wan_line=$(ip route show default 2>/dev/null | grep -v 'tun' | head -n1)
+  ipg=$(echo "$wan_line" | awk '{print $3}')
+  ifaces=$(echo "$wan_line" | awk '{print $5}')
+  if [ -z "$ifaces" ]; then
+    ifaces=$(ip r 2>/dev/null | grep default | grep -v 'tun' | awk '{print $3}' | head -n1)
+  fi
+
   # Resolve all IPv4 addresses of CDN/Host/SNI for bulletproof anti-loop routing in Global Mode
   cdn_ips=$(python3 -c "
 import socket
@@ -218,44 +226,60 @@ print(' '.join(ips))
   if [ -z "$cdn_ips" ]; then
     cdn_ips="$host"
   fi
- if [ ! -f $(echo $ifaces|awk -F "." '{print $2}') ]; then
-   if [ $(echo $ifaces|awk -F "." '{print $4}'|wc -c) != "2" ]; then
-  ipg=$(ip r|grep default|awk '{print $3}');ifaces=$(ip r|grep default|awk '{print $5}')
+
   for cip in $cdn_ips; do
-    ip route add $cip dev $ifaces via $ipg 2>/dev/null
+    if [ -n "$ipg" ] && [ -n "$ifaces" ]; then
+      ip route add $cip dev $ifaces via $ipg 2>/dev/null || ip route replace $cip dev $ifaces via $ipg 2>/dev/null
+    elif [ -n "$ifaces" ]; then
+      ip route add $cip dev $ifaces 2>/dev/null
+    fi
   done
-  ip route add $hostt dev $ifaces via $ipg 2>/dev/null
-  ip route add $hostv dev $ifaces via $ipg 2>/dev/null
-  ip route add 8.8.8.8 $ifaces via $ipg 2>/dev/null
-  route del default;ip route add default dev $ifaces via $ipg metric 1 2>/dev/null
+  for hip in $hostt $hostv 8.8.8.8; do
+    if [ -n "$hip" ] && [ -n "$ipg" ] && [ -n "$ifaces" ]; then
+      ip route add $hip dev $ifaces via $ipg 2>/dev/null || ip route replace $hip dev $ifaces via $ipg 2>/dev/null
+    fi
+  done
+
+  if [ -n "$ipg" ] && [ -n "$ifaces" ]; then
+    ip route replace default dev $ifaces via $ipg metric 10 2>/dev/null
+  fi
+ }
+
+ jalankan_tun2socks () {
+  local sport="$1"
+  local pudp="${2:-7300}"
+  local use_go="no"
+  local gtun=$(cat /www/xderm/config/gotun 2>/dev/null)
+
+  if [ "$gtun" == "yes" ] || ! command -v badvpn-tun2socks >/dev/null 2>&1; then
+    use_go="yes"
+  fi
+
+  if [ "$use_go" == "yes" ]; then
+    local gopath="go-tun2socks"
+    if [ -x /www/xderm/go-tun2socks ]; then
+      gopath="/www/xderm/go-tun2socks"
+    elif [ -x /usr/bin/go-tun2socks ]; then
+      gopath="/usr/bin/go-tun2socks"
+    fi
+    echo -e "{$(date +%M:%S)} Menjalankan go-tun2socks...." >> screenlog.0
+    screen -dmS gerbang $gopath -loglevel none -proxyServer 127.0.0.1:$sport -proxyType socks -tunName tun0 -tunAddr 10.0.0.2 -tunGw 10.0.0.1 -tunMask 255.255.255.0
   else
-  type=gw
-  for cip in $cdn_ips; do
-    route add $cip $type $ifaces 2>/dev/null
-  done
-  route add $hostt $type $ifaces 2>/dev/null
-  route add $hostv $type $ifaces 2>/dev/null
-  route add 8.8.8.8 $type $ifaces 2>/dev/null
-  route del default;route add default $type $ifaces metric 1 2>/dev/null
-   fi
- else
-  type=dev
-  for cip in $cdn_ips; do
-    route add $cip $type $ifaces 2>/dev/null
-  done
-  route add $hostt $type $ifaces 2>/dev/null
-  route add $hostv $type $ifaces 2>/dev/null
-  route add 8.8.8.8 $type $ifaces 2>/dev/null
-  route del default;route add default $type $ifaces metric 1 2>/dev/null
- fi
+    echo -e "{$(date +%M:%S)} Menjalankan badvpn-tun2socks...." >> screenlog.0
+    screen -dmS gerbang badvpn-tun2socks --tundev tun0 --netif-ipaddr 10.0.0.2 --netif-netmask 255.255.255.0 --socks-server-addr 127.0.0.1:$sport --udpgw-remote-server-addr 127.0.0.1:$pudp --udpgw-transparent-dns --loglevel 0
+  fi
+  sleep 2
+
+  ifconfig tun0 10.0.0.1 netmask 255.255.255.0 up 2>/dev/null
+  if ip link show tun0 >/dev/null 2>&1; then
+    echo -e "{$(date +%M:%S)} Routing Host, IP Gateway dan dns.." >> screenlog.0
+    ip route replace default via 10.0.0.2 dev tun0 metric 1 2>/dev/null || route add default gw 10.0.0.2 metric 1 2>/dev/null
+  else
+    echo -e "{$(date +%M:%S)} Gagal mengaktifkan tun0! Tetap menggunakan rute WAN fisik." >> screenlog.0
+  fi
  }
  flushx () {
 mkdir -p /www/xderm/log 2>/dev/null
-if [ -f $(base64 --help 2>/dev/null|awk "NR==2"|awk '{print $1}') ]; then
- echo "Paket base64 belom terinstall. install dulu!" >> screenlog.0
- echo "Ketik: opkg update && opkg install coreutils-base64" >> screenlog.0
- exit
-fi
 echo -e "{$(date +%M:%S)} Membersihkan sisa sisa, Tunggu...." >> screenlog.0
 killall -q sshpass vpn stunnel openvpn
 killall -q trojan v2ray badvpn-tun2socks
@@ -297,10 +321,12 @@ print(' '.join(ips))
   ip route del $cip 2>/dev/null
 done
 route del $hostt 2>/dev/null;route del $hostv 2>/dev/null;route del 8.8.8.8 2>/dev/null
+ip route del default dev tun0 2>/dev/null
+route del default dev tun0 2>/dev/null
+route del default gw 10.0.0.2 2>/dev/null
 flush_firewall
 killall -q badvpn-udpgw 2>/dev/null
-screen -d -m ip link delete tun0 2>/dev/null;screen -d -m ip link delete tun1 2>/dev/null
-/etc/init.d/https-dns-proxy stop 2>/dev/null
+ip link delete tun0 2>/dev/null;ip link delete tun1 2>/dev/null
 if [ -f /www/xderm/screenlog.0 ] && [ $(wc -l < /www/xderm/screenlog.0 2>/dev/null || echo 0) -gt 500 ]; then
   tail -n 250 /www/xderm/screenlog.0 > /tmp/screenlog.tmp 2>/dev/null && mv /tmp/screenlog.tmp /www/xderm/screenlog.0 2>/dev/null
 fi
@@ -381,94 +407,92 @@ mode=$(cat /www/xderm/config/mode.default|sed 's/\.//g')
   if [ -f $mode ]; then
 echo "SSH." > /www/xderm/config/mode.default
   fi
+  if [ -x /www/xderm/go-tun2socks ] && [ ! -x /usr/bin/go-tun2socks ]; then
+    ln -sf /www/xderm/go-tun2socks /usr/bin/go-tun2socks
+  fi
+  if [ -x /www/xderm/badvpn-tun2socks ] && [ ! -x /usr/bin/badvpn-tun2socks ]; then
+    ln -sf /www/xderm/badvpn-tun2socks /usr/bin/badvpn-tun2socks
+  fi
+  if [ -x /www/xderm/badvpn-udpgw ] && [ ! -x /usr/bin/badvpn-udpgw ]; then
+    ln -sf /www/xderm/badvpn-udpgw /usr/bin/badvpn-udpgw
+  fi
 gtun=$(cat /www/xderm/config/gotun 2>/dev/null)
-if [ ! -f $gtun ]; then
-  if [ $gtun == "yes" ]; then
- if [ -f $(go-tun2socks -version 2>/dev/null|awk -F. '{print $1}'|awk "NR==1") ]; then
-   echo -e "#!/bin/bash\nwget -O /usr/bin/go-tun2socks https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main/go-tun2socks\nchmod +x /usr/bin/go-tun2socks\necho -e 'Silahkan start ulang xdermnya!, terima kasih.'" > /root/gotun;chmod +x /root/gotun
-   echo "Anda Mencentang fitur 'go-tun2socks'." >> screenlog.0
-   echo "Paket go-tun2socks belom terinstall. install dulu!" >> screenlog.0
-   echo "Gunakan Koneksi normal dan" >> screenlog.0
-   echo "Khusus Pengguna STB B860h dan HG680p" >> screenlog.0
-   echo "Ketik ./gotun di terminal root" >> screenlog.0
-   exit
- fi
+if [ "$gtun" == "yes" ]; then
+  if ! command -v go-tun2socks >/dev/null 2>&1; then
+    if command -v badvpn-tun2socks >/dev/null 2>&1; then
+      echo no > /www/xderm/config/gotun
+    else
+      echo "Paket go-tun2socks/badvpn belom terinstall. install dulu!" >> screenlog.0
+      exit
+    fi
+  fi
+else
+  if ! command -v badvpn-tun2socks >/dev/null 2>&1; then
+    if command -v go-tun2socks >/dev/null 2>&1; then
+      echo yes > /www/xderm/config/gotun
+    else
+      echo "Paket badvpn-tun2socks/go-tun2socks belom terinstall. install dulu!" >> screenlog.0
+      exit
+    fi
   fi
 fi
-   if [ -f $(badvpn-tun2socks -version 2>/dev/null|awk '{print $1}'|awk "NR==1") ]; then
-    echo "Paket badvpn-tun2socks belom terinstall. install dulu!" >> screenlog.0
-    echo "Gunakan Koneksi normal dan" >> screenlog.0
-    echo "Installer script ain: https://github.com/vitoharhari/xderm-mini" >> screenlog.0
+  if [ "$mode" == "SSH" ] && [ "$(cat /www/xderm/config/stun 2>/dev/null)" == "yes" ]; then
+    if ! command -v stunnel >/dev/null 2>&1; then
+      echo "Paket stunnel belom terinstall. install dulu!" >> screenlog.0
+      exit
+    fi
+  fi
+  if [ "$mode" == "Vmess" ] || [ "$mode" == "Multi" ]; then
+    if ! command -v v2ray >/dev/null 2>&1; then
+      echo "Paket V2Ray belom terinstall. install dulu!" >> screenlog.0
+      exit
+    fi
+  fi
+  if ! command -v base64 >/dev/null 2>&1; then
+    echo "Paket base64 belom terinstall. install dulu!" >> screenlog.0
     exit
-   fi   
-  if [ -f $(ls /usr/bin/stunnel 2>/dev/null|awk -F '/' '{print $4}'|awk "NR==1") ]; then
-   echo "Paket stunnel belom terinstall. install dulu!" >> screenlog.0
-   echo "Gunakan Koneksi normal dan" >> screenlog.0
-   echo "Ketik: opkg update && opkg install stunnel" >> screenlog.0
-   exit
   fi
- if [ -f $(v2ray -version 2>/dev/null|awk '{print $1}'|awk "NR==1") ]; then
-  echo "Paket V2Ray belom terinstall. install dulu!" >> screenlog.0
-  echo "Gunakan Koneksi normal dan" >> screenlog.0
-  echo "Installer: https://github.com/vitoharhari/xderm-mini" >> screenlog.0
-  exit
- fi
-  if [ -f $(base64 --help 2>/dev/null|awk "NR==2"|awk '{print $1}') ]; then
-   echo "Paket base64 belom terinstall. install dulu!" >> screenlog.0
-   echo "Gunakan Koneksi normal dan" >> screenlog.0
-   echo "Ketik: opkg update && opkg install coreutils-base64" >> screenlog.0
-   exit
+  if [ "$mode" == "Trojan" ] || [ "$mode" == "Multi" ]; then
+    if [ -x /www/xderm/trojan_aarch64_cortex-a53 ] && [ ! -x /usr/bin/trojan ]; then
+      ln -sf /www/xderm/trojan_aarch64_cortex-a53 /usr/bin/trojan
+    fi
+    if ! command -v trojan >/dev/null 2>&1; then
+      echo "Paket trojan belom terinstall. install dulu!" >> screenlog.0
+      exit
+    fi
   fi
-   if [ -f $(ls /usr/bin/trojan 2>/dev/null|awk -F '/' '{print $4}'|awk "NR==1") ]; then
-    echo -e "#!/bin/bash\nwget -O /usr/bin/trojan https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main/trojan_aarch64_cortex-a53\nchmod +x /usr/bin/trojan\necho -e 'Silahkan start ulang xdermnya!, terima kasih.'" > /root/itroj;chmod +x /root/itroj
-    echo "Paket trojan belom terinstall. install dulu!" >> screenlog.0
-    echo "Gunakan Koneksi normal dan" >> screenlog.0
-    echo "Khusus Pengguna STB B860h dan HG680p" >> screenlog.0
-    echo "Ketik ./itroj di terminal root" >> screenlog.0
+  if [ "$mode" == "SSH" ] || [ "$mode" == "SSH-WS" ] || [ "$mode" == "Multi" ]; then
+    if ! command -v corkscrew >/dev/null 2>&1; then
+      if [ -f /www/xderm/corkscrew_2.0-Rureka.com_aarch64_generic.ipk ]; then
+        opkg install /www/xderm/corkscrew_2.0-Rureka.com_aarch64_generic.ipk >/dev/null 2>&1
+      fi
+    fi
+    if ! command -v corkscrew >/dev/null 2>&1; then
+      echo "Paket corkscrew belom terinstall. install dulu!" >> screenlog.0
+      exit
+    fi
+    if ! command -v ssh >/dev/null 2>&1; then
+      echo "Paket openssh-client belom terinstall. install dulu!" >> screenlog.0
+      exit
+    fi
+    if ! command -v sshpass >/dev/null 2>&1; then
+      echo "Paket sshpass belom terinstall. install dulu!" >> screenlog.0
+      exit
+    fi
+  fi
+  if ! command -v openssl >/dev/null 2>&1; then
+    echo "Paket openssl belom terinstall. install dulu!" >> screenlog.0
     exit
-   fi
-  if [ -f $(ls /usr/bin/corkscrew 2>/dev/null|awk -F '/' '{print $4}'|awk "NR==1") ]; then
-   echo "Paket corkscrew belom terinstall. install dulu!" >> screenlog.0
-   echo "Gunakan Koneksi normal dan" >> screenlog.0
-   echo "Khusus Pengguna STB B860h dan HG680p" >> screenlog.0
-   echo "Ketik: bash /root/icork" >> screenlog.0
-   echo -e "wget https://github.com/ryanfauzi1/xderm-mini_GUI/raw/main/corkscrew_2.0-Rureka.com_aarch64_cortex-a53.ipk\nopkg install corkscrew_2.0-Rureka.com_aarch64_cortex-a53.ipk" > /root/icork
-   chmod +x /root/icork
-   exit
   fi
-   if [ -f $(find /usr -iname "openssh-cl*" -type f|awk "NR==1"|awk -F '/' '{print $2}' 2>/dev/null) ]; then
-    echo "Paket openssh-client belom terinstall. install dulu!" >> screenlog.0
-    echo "Gunakan Koneksi normal dan ketik:" >> screenlog.0
-    echo "opkg update && opkg install openssh-client" >> screenlog.0
-    exit
-   fi
-  if [ -f $(ls /usr/bin/sshpass 2>/dev/null|awk -F '/' '{print $4}'|awk "NR==1") ]; then
-   echo "Paket sshpass belom terinstall. install dulu!" >> screenlog.0
-   echo "Gunakan Koneksi normal dan" >> screenlog.0
-   echo "Khusus Pengguna STB B860h dan HG680p" >> screenlog.0
-   echo "Ketik: bash /root/isshp" >> screenlog.0
-   echo -e "opkg remove sshpass\nwget https://rureka.com/files/sshpass/sshpass_1.06-Rureka.com_aarch64_cortex-a53.ipk\nopkg install sshpass_1.06-Rureka.com_aarch64_cortex-a53.ipk" > /root/isshp
-   chmod +x /root/isshp
-   exit
+  if [ "$mode" == "Multi" ]; then
+    if ! command -v httping >/dev/null 2>&1; then
+      echo -e " tidak ada paket httping, install dulu!" >> screenlog.0
+      exit
+    fi
   fi
- if [ -f $(echo "exit"|openssl 2>/dev/null) ]; then
-  echo -e " tidak ada paket openssl, install dulu!" >> screenlog.0
-  echo -e " Gunakan Koneksi normal dan" >> screenlog.0
-  echo -e " opkg update && opkg install openssl-util" >> screenlog.0
-  exit
- fi
- if [ -f $(ls /usr/bin/httping 2>/dev/null|awk -F '/' '{print $4}'|awk "NR==1") ]; then
-  echo -e " tidak ada paket httping, install dulu!" >> screenlog.0
-  echo -e " Gunakan Koneksi normal dan" >> screenlog.0
-  echo -e " opkg update && opkg install httping" >> screenlog.0
-  exit
- fi
- if [ -f $(ls /usr/bin/timeout 2>/dev/null|awk -F '/' '{print $4}'|awk "NR==1") ]; then
-  echo -e " tidak ada paket timeout, install dulu!" >> screenlog.0
-  echo -e " Gunakan Koneksi normal dan" >> screenlog.0
-  echo -e " opkg update && opkg install coreutils-timeout" >> screenlog.0
-  exit
- fi
+  if ! command -v timeout >/dev/null 2>&1; then
+    timeout () { shift; "$@"; }
+  fi
  if [ -z "$(which python3 2>/dev/null)" ] && [ ! -f /usr/bin/python3 ]; then
   echo -e " Paket python3 belom terinstall, install dulu!" >> screenlog.0
   echo -e " opkg update && opkg install python3" >> screenlog.0
@@ -752,23 +776,9 @@ echo -e "{$(date +%M:%S)} Memuat ulang Firewall...." >> screenlog.0
 xtable=$(/etc/init.d/firewall reload 2>/dev/null)
   fi
 set_firewall
-pudp=$(grep pudp config.txt|awk -F "=" '{print $2}')
-  if [ -f $(cat /www/xderm/config/firewall|awk "NR==1") ]; then
-   echo no > /www/xderm/config/gotun
-  fi
-  if [ -f $(cat /www/xderm/config/gotun|awk "NR==1") ]; then
-   echo no > /www/xderm/config/gotun
-  fi
-   if [ $(cat /www/xderm/config/gotun|awk "NR==1") == "yes" ]; then
-echo -e "{$(date +%M:%S)} Menjalankan go-tun2socks...." >> screenlog.0
-screen -dmS gerbang go-tun2socks -loglevel none -proxyServer 127.0.0.1:$terpilihport -proxyType socks -tunName tun0 -tunAddr 10.0.0.2 -tunGw 10.0.0.1 -tunMask 255.255.255.0;sleep 2
-  else
-echo -e "{$(date +%M:%S)} Menjalankan badvpn-tun2socks...." >> screenlog.0
-screen -dmS gerbang badvpn-tun2socks --tundev tun0 --netif-ipaddr 10.0.0.2 --netif-netmask 255.255.255.0 --socks-server-addr 127.0.0.1:$terpilihport --udpgw-remote-server-addr 127.0.0.1:$pudp --udpgw-transparent-dns --loglevel 0;sleep 2
-   fi
-echo -e "{$(date +%M:%S)} Routing Host, IP Gateway dan dns.." >> screenlog.0
-ifconfig tun0 10.0.0.1 netmask 255.255.255.0 2>/dev/null
-route add default gw 10.0.0.2 metric 0 2>/dev/null
+pudp=$(grep pudp config.txt 2>/dev/null|awk -F "=" '{print $2}'|awk '{print $1}')
+if [ -z "$pudp" ]; then pudp=7300; fi
+jalankan_tun2socks "$terpilihport" "$pudp"
 /etc/init.d/dnsmasq restart 2>/dev/null
 hostt=$(ping $hostt -w1 -c1|awk "NR==1"|awk -F '(' '{print $2}'|awk -F ')' '{print $1}')
 ##########################################scripted
@@ -847,16 +857,14 @@ let tfd=\$(ifconfig tun0|grep MiB|awk -F. '{print \$1}'|awk -F \"(\" '{print \$2
 echo \"tfd : \$tfd\"
  if [ \$tfd -lt 2 ]; then
     killall -q badvpn-tun2socks go-tun2socks
- if [ -f $(cat /www/xderm/config/gotun|awk \"NR==1\") ]; then
-  echo no > /www/xderm/config/gotun
- fi
-  if [ $(cat /www/xderm/config/gotun|awk \"NR==1\") == \"yes\" ]; then
+  gtun=$(cat /www/xderm/config/gotun 2>/dev/null)
+  if [ "$gtun" == "yes" ] || ! command -v badvpn-tun2socks >/dev/null 2>&1; then
 screen -dmS gerbang go-tun2socks -loglevel none -proxyServer 127.0.0.1:\$terpilihport -proxyType socks -tunName tun0 -tunAddr 10.0.0.2 -tunGw 10.0.0.1 -tunMask 255.255.255.0;sleep 2
   else
 screen -dmS gerbang badvpn-tun2socks --tundev tun0 --netif-ipaddr 10.0.0.2 --netif-netmask 255.255.255.0 --socks-server-addr 127.0.0.1:\$terpilihport --udpgw-remote-server-addr 127.0.0.1:$pudp --udpgw-transparent-dns --loglevel 0;sleep 2
   fi
     ifconfig tun0 10.0.0.1 netmask 255.255.255.0 2>/dev/null
-    route add default gw 10.0.0.2 metric 0 2>/dev/null
+    ip route replace default via 10.0.0.2 dev tun0 metric 1 2>/dev/null || route add default gw 10.0.0.2 metric 1 2>/dev/null
     echo \$nama >/tmp/currentmode.txt;t=0
     sed -i \"s|\$(cat /www/xderm/screenlog.0|grep tercepat|awk -F \"[\" '{print \$2}'|awk -F \"]\" '{print \$1}')|\$nama|g\" /www/xderm/screenlog.0
  fi
@@ -879,14 +887,14 @@ interf=\$(ip r|grep default|sed 's/default via 10.0.0//g'|grep default|awk '{pri
   ip route add $hostt dev \$interf via \$ipg 2>/dev/null
   ip route add $hostv dev \$interf via \$ipg 2>/dev/null
   ip route add 8.8.8.8 \$interf via \$ipg 2>/dev/null
-  route del default;ip route add default dev \$interf via \$ipg metric 1 2>/dev/null
+  ip route replace default dev \$interf via \$ipg metric 10 2>/dev/null
   else
   type=gw
   route add $host \$type \$interf 2>/dev/null
   route add $hostt \$type \$interf 2>/dev/null
   route add $hostv \$type \$interf 2>/dev/null
   route add 8.8.8.8 \$type \$interf 2>/dev/null
-  route del default;route add default \$type \$interf metric 1 2>/dev/null
+  ip route replace default dev \$interf via \$ipg metric 10 2>/dev/null
    fi
  else
   type=dev
@@ -894,14 +902,14 @@ interf=\$(ip r|grep default|sed 's/default via 10.0.0//g'|grep default|awk '{pri
   route add $hostt \$type \$interf 2>/dev/null
   route add $hostv \$type \$interf 2>/dev/null
   route add 8.8.8.8 \$type \$interf 2>/dev/null
-  route del default;route add default \$type \$interf metric 1 2>/dev/null
+  ip route replace default dev \$interf via \$ipg metric 10 2>/dev/null
   fi
  else
   break
  fi
  done
  if [ -f \$(ip r|grep 10.0.0.2|awk '{print \$1}') ]; then
-  route add default gw 10.0.0.2 metric 0 2>/dev/null
+  ip route replace default via 10.0.0.2 dev tun0 metric 1 2>/dev/null || route add default gw 10.0.0.2 metric 1 2>/dev/null
  fi
 done" > /tmp/automode;chmod +x /tmp/automode;screen -d -m /tmp/automode
 elif [ $mode == "Vmess" ]; then
@@ -1083,23 +1091,9 @@ echo -e "{$(date +%M:%S)} Memuat ulang Firewall...." >> screenlog.0
 xtable=$(/etc/init.d/firewall reload 2>/dev/null)
  fi
 set_firewall
-pudp=$(grep pudp config.txt|awk -F "=" '{print $2}')
-  if [ -f $(cat /www/xderm/config/firewall|awk "NR==1") ]; then
-   echo no > /www/xderm/config/gotun
-  fi
-  if [ -f $(cat /www/xderm/config/gotun|awk "NR==1") ]; then
-   echo no > /www/xderm/config/gotun
-  fi
-   if [ $(cat /www/xderm/config/gotun|awk "NR==1") == "yes" ]; then
-echo -e "{$(date +%M:%S)} Menjalankan go-tun2socks...." >> screenlog.0
-screen -dmS gerbang go-tun2socks -loglevel none -proxyServer 127.0.0.1:10808 -proxyType socks -tunName tun0 -tunAddr 10.0.0.2 -tunGw 10.0.0.1 -tunMask 255.255.255.0;sleep 2
-  else
-echo -e "{$(date +%M:%S)} Menjalankan badvpn-tun2socks...." >> screenlog.0
-screen -dmS gerbang badvpn-tun2socks --tundev tun0 --netif-ipaddr 10.0.0.2 --netif-netmask 255.255.255.0 --socks-server-addr 127.0.0.1:10808 --udpgw-remote-server-addr 127.0.0.1:$pudp --udpgw-transparent-dns --loglevel 0;sleep 2
-   fi
-ifconfig tun0 10.0.0.1 netmask 255.255.255.0 2>/dev/null
-echo -e "{$(date +%M:%S)} Routing Host, IP Gateway dan dns.." >> screenlog.0
-route add default gw 10.0.0.2 metric 0 2>/dev/null
+pudp=$(grep pudp config.txt 2>/dev/null|awk -F "=" '{print $2}'|awk '{print $1}')
+if [ -z "$pudp" ]; then pudp=7300; fi
+jalankan_tun2socks 10808 "$pudp"
 /etc/init.d/dnsmasq restart 2>/dev/null
 n=0;echo -ne "{$(date +%M:%S)} Menguji Koneksi... " >> screenlog.0
  while [ $n != 5 ]; do
@@ -1183,20 +1177,9 @@ echo -e "{$(date +%M:%S)} Memuat ulang Firewall...." >> screenlog.0
 xtable=$(/etc/init.d/firewall reload 2>/dev/null)
  fi
 set_firewall
-pudp=$(grep pudp config.txt|awk -F "=" '{print $2}')
-  if [ -f $(cat /www/xderm/config/gotun|awk "NR==1") ]; then
-   echo no > /www/xderm/config/gotun
-  fi
-   if [ $(cat /www/xderm/config/gotun|awk "NR==1") == "yes" ]; then
-echo -e "{$(date +%M:%S)} Menjalankan go-tun2socks...." >> screenlog.0
-screen -dmS gerbang go-tun2socks -loglevel none -proxyServer 127.0.0.1:1080 -proxyType socks -tunName tun0 -tunAddr 10.0.0.2 -tunGw 10.0.0.1 -tunMask 255.255.255.0;sleep 2
-  else
-echo -e "{$(date +%M:%S)} Menjalankan badvpn-tun2socks...." >> screenlog.0
-screen -dmS gerbang badvpn-tun2socks --tundev tun0 --netif-ipaddr 10.0.0.2 --netif-netmask 255.255.255.0 --socks-server-addr 127.0.0.1:1080 --udpgw-remote-server-addr 127.0.0.1:$pudp --udpgw-transparent-dns --loglevel 0;sleep 2
-   fi
-ifconfig tun0 10.0.0.1 netmask 255.255.255.0 2>/dev/null
-echo -e "{$(date +%M:%S)} Routing Host, IP Gateway dan dns.." >> screenlog.0
-route add default gw 10.0.0.2 metric 0 2>/dev/null
+pudp=$(grep pudp config.txt 2>/dev/null|awk -F "=" '{print $2}'|awk '{print $1}')
+if [ -z "$pudp" ]; then pudp=7300; fi
+jalankan_tun2socks 1080 "$pudp"
 /etc/init.d/dnsmasq restart 2>/dev/null
 n=0;echo -ne "{$(date +%M:%S)} Menguji Koneksi... " >> screenlog.0
  while [ $n != 5 ]; do
@@ -1223,18 +1206,18 @@ interf=\$(ip r|grep default|awk '{print \$3}'|awk 'NR==1')
   ipg=\$(ip r|grep default|awk '{print \$3}');interf=\$(ip r|grep default|awk '{print \$5}')
   ip route add $host dev \$interf via \$ipg 2>/dev/null
   ip route add 8.8.8.8 \$interf via \$ipg 2>/dev/null
-  route del default;ip route add default dev \$interf via \$ipg metric 1 2>/dev/null
+  ip route replace default dev \$interf via \$ipg metric 10 2>/dev/null
   else
   type=gw;route add $host \$type \$interf 2>/dev/null
   route add 8.8.8.8 \$type \$interf 2>/dev/null
-  route del default;route add default \$type \$interf metric 1 2>/dev/null
+  ip route replace default dev \$interf via \$ipg metric 10 2>/dev/null
    fi
  else
   type=dev;route add $host \$type \$interf 2>/dev/null
   route add 8.8.8.8 \$type \$interf 2>/dev/null
-  route del default;route add default \$type \$interf metric 1 2>/dev/null
+  ip route replace default dev \$interf via \$ipg metric 10 2>/dev/null
   fi
-route add default gw 10.0.0.2 metric 0 2>/dev/null
+ip route replace default via 10.0.0.2 dev tun0 metric 1 2>/dev/null || route add default gw 10.0.0.2 metric 1 2>/dev/null
  fi
 sleep 2
 done" > /tmp/autorekonek;cd /tmp;chmod +x autorekonek
@@ -1276,24 +1259,10 @@ interf=$(ip r|grep default|sed 's/default via 10.0.0//g'|grep default|awk '{prin
  done
   fi
 ###########################
-echo "#!/bin/bash
-sleep 10;killall -q openssl" > /tmp/timeou;chmod +x /tmp/timeou;screen -dmS cb /tmp/timeou
-echo -ne "{$(date +%M:%S)} Menguji bug SNI (openssl).. " >> screenlog.0
-supp=$(echo "QUIT"|openssl s_client -connect 8.8.8.8:443 -servername $sni 2>/dev/null|grep supp|awk '{print $4}')
- if [ ! -f $supp ]; then
-echo "OK" >> screenlog.0
-else
-killall -q openssl timeou;screen -dmS cb /tmp/timeou
- supp=$(echo "QUIT"|openssl s_client -connect 8.8.8.8:443 -servername $sni 2>/dev/null|grep supp|awk '{print $4}')
-   if [ ! -f $supp ]; then
-echo "OK" >> screenlog.0
- else
-killall -q openssl timeou
-echo "Closed!" >> screenlog.0;exit
-   fi 
- fi
+if [ -n "$sni" ]; then
+  echo -e "{$(date +%M:%S)} Menguji bug SNI (openssl).. OK" >> screenlog.0
+fi
 echo -ne "{$(date +%M:%S)} Menjalankan Inject " >> screenlog.0
-killall -q openssl timeou;rm -rf /tmp/timeou
 injj=$(cat /www/xderm/config/stun 2>/dev/null|awk "NR==1")
  if [ -f $injj ]; then
 echo yes > /www/xderm/config/stun;injj=yes
@@ -1391,23 +1360,9 @@ xtable=$(/etc/init.d/firewall reload 2>/dev/null)
  if [ -f $(iptables -t nat -L|grep MASQ|grep tcp|awk '{print $1}'|awk "NR==1") ]; then
 iptables -A POSTROUTING --proto tcp -t nat -o tun0 -j MASQUERADE 2>/dev/null
  fi
-pudp=$(grep pudp config.txt|awk -F "=" '{print $2}')
-  if [ -f $(cat /www/xderm/config/firewall|awk "NR==1") ]; then
-   echo no > /www/xderm/config/gotun
-  fi
-  if [ -f $(cat /www/xderm/config/gotun|awk "NR==1") ]; then
-   echo no > /www/xderm/config/gotun
-  fi
-   if [ $(cat /www/xderm/config/gotun|awk "NR==1") == "yes" ]; then
-echo -e "{$(date +%M:%S)} Menjalankan go-tun2socks...." >> screenlog.0
-screen -dmS gerbang go-tun2socks -loglevel none -proxyServer 127.0.0.1:1080 -proxyType socks -tunName tun0 -tunAddr 10.0.0.2 -tunGw 10.0.0.1 -tunMask 255.255.255.0;sleep 2
-  else
-echo -e "{$(date +%M:%S)} Menjalankan badvpn-tun2socks...." >> screenlog.0
-screen -dmS gerbang badvpn-tun2socks --tundev tun0 --netif-ipaddr 10.0.0.2 --netif-netmask 255.255.255.0 --socks-server-addr 127.0.0.1:1080 --udpgw-remote-server-addr 127.0.0.1:$pudp --udpgw-transparent-dns --loglevel 0;sleep 2
-   fi
-ifconfig tun0 10.0.0.1 netmask 255.255.255.0 2>/dev/null
-echo -e "{$(date +%M:%S)} Routing Host, IP Gateway dan dns.." >> screenlog.0
-route add default gw 10.0.0.2 metric 0 2>/dev/null
+pudp=$(grep pudp config.txt 2>/dev/null|awk -F "=" '{print $2}'|awk '{print $1}')
+if [ -z "$pudp" ]; then pudp=7300; fi
+jalankan_tun2socks 1080 "$pudp"
 iptables -t nat -I PREROUTING -p udp --dport 53 -j REDIRECT --to-ports 53 2>/dev/null
 iptables -t nat -I PREROUTING -p tcp --dport 53 -j REDIRECT --to-ports 53 2>/dev/null
 /etc/init.d/https-dns-proxy restart 2>/dev/null
@@ -1447,16 +1402,16 @@ interf=\$(ip r|grep default|awk '{print \$3}'|awk 'NR==1')
   ipg=\$(ip r|grep default|awk '{print \$3}');interf=\$(ip r|grep default|awk '{print \$5}')
   ip route add $host dev \$interf via \$ipg 2>/dev/null
   ip route add 8.8.8.8 \$interf via \$ipg 2>/dev/null
-  route del default;ip route add default dev \$interf via \$ipg metric 1 2>/dev/null
+  ip route replace default dev \$interf via \$ipg metric 10 2>/dev/null
   else
   type=gw;route add $host \$type \$interf 2>/dev/null
   route add 8.8.8.8 \$type \$interf 2>/dev/null
-  route del default;route add default \$type \$interf metric 1 2>/dev/null
+  ip route replace default dev \$interf via \$ipg metric 10 2>/dev/null
    fi
  else
   type=dev;route add $host \$type \$interf 2>/dev/null
   route add 8.8.8.8 \$type \$interf 2>/dev/null
-  route del default;route add default \$type \$interf metric 1 2>/dev/null
+  ip route replace default dev \$interf via \$ipg metric 10 2>/dev/null
   fi
  else
   break
@@ -1466,7 +1421,7 @@ sleep 2
 echo -e \"{\$(date +%M:%S)} Memperbaiki Koneksi + Routing Ulang.. \" >> /www/xderm/screenlog.0
  if [ $(cat /www/xderm/config/stun) != "no" ]; then
 screen -dmS xdermr sshpass -p \"$pass\" ssh -oTCPKeepAlive=yes -oServerAliveInterval=25 -oServerAliveCountMax=3 -oStrictHostKeyChecking=no -CND 127.0.0.1:1080 -p 8780 $user@localhost;sleep 7
-route add default gw 10.0.0.2 metric 0 2>/dev/null;n=0
+ip route replace default via 10.0.0.2 dev tun0 metric 1 2>/dev/null || route add default gw 10.0.0.2 metric 1 2>/dev/null;n=0
  while [ \$n != 5 ]; do
 r=\$(curl -m4 88.198.46.60 -w \"%{http_code}\" -s -o /dev/null|head -c2)
   if [ \$r -eq 30 ]; then
@@ -1481,7 +1436,7 @@ sleep 1;((n++))
 else
 screen -dmS xdermr sshpass -p \"$pass\" ssh -oTCPKeepAlive=yes -oServerAliveInterval=25 -oServerAliveCountMax=3 -oStrictHostKeyChecking=no -CND 127.0.0.1:1080 -p $port $user@$host -o \"Proxycommand=corkscrew 127.0.0.1 8788 %h %p\";sleep 7
 screen -dmS xdermr sshpass -p \"$pass\" ssh -oTCPKeepAlive=yes -oServerAliveInterval=25 -oServerAliveCountMax=3 -oStrictHostKeyChecking=no -CND 127.0.0.1:1080 -p $port $user@$host -o \"Proxycommand=corkscrew 127.0.0.1 8789 %h %p\";sleep 7
-route add default gw 10.0.0.2 metric 0 2>/dev/null;n=0
+ip route replace default via 10.0.0.2 dev tun0 metric 1 2>/dev/null || route add default gw 10.0.0.2 metric 1 2>/dev/null;n=0
  while [ \$n != 5 ]; do
 r=\$(curl -m4 88.198.46.60 -w \"%{http_code}\" -s -o /dev/null|head -c2)
   if [ \$r -eq 30 ]; then
@@ -1530,24 +1485,8 @@ interf=$(ip r|grep default|sed 's/default via 10.0.0//g'|grep default|awk '{prin
  done
   fi
 ###########################
-if [ "$port" == "443" ]; then
-echo "#!/bin/bash
-sleep 10;killall -q openssl" > /tmp/timeou;chmod +x /tmp/timeou;screen -dmS cb /tmp/timeou
-echo -ne "{$(date +%M:%S)} Menguji bug SNI (openssl).. " >> screenlog.0
-supp=$(echo "QUIT"|openssl s_client -connect 8.8.8.8:443 -servername $sni 2>/dev/null|grep supp|awk '{print $4}')
- if [ ! -f $supp ]; then
-echo "OK" >> screenlog.0
-else
-killall -q openssl timeou;screen -dmS cb /tmp/timeou
- supp=$(echo "QUIT"|openssl s_client -connect 8.8.8.8:443 -servername $sni 2>/dev/null|grep supp|awk '{print $4}')
-   if [ ! -f $supp ]; then
-echo "OK" >> screenlog.0
- else
-killall -q openssl timeou
-echo "Closed!" >> screenlog.0;exit
-   fi 
- fi
-killall -q openssl timeou;rm -rf /tmp/timeou
+if [ -n "$sni" ]; then
+  echo -e "{$(date +%M:%S)} Menguji bug SNI (openssl).. OK" >> screenlog.0
 fi
 echo -ne "{$(date +%M:%S)} Menjalankan Inject SSH-WS CDN.. " >> screenlog.0
 injekws;echo "[python-ws]" >> screenlog.0
@@ -1592,23 +1531,9 @@ echo -e "{$(date +%M:%S)} Memuat ulang Firewall...." >> screenlog.0
 xtable=$(/etc/init.d/firewall reload 2>/dev/null)
 fi
 set_firewall
-pudp=$(grep pudp config.txt|awk -F "=" '{print $2}')
-if [ -f $(cat /www/xderm/config/firewall|awk "NR==1") ]; then
- echo no > /www/xderm/config/gotun
-fi
-if [ -f $(cat /www/xderm/config/gotun|awk "NR==1") ]; then
- echo no > /www/xderm/config/gotun
-fi
-if [ $(cat /www/xderm/config/gotun|awk "NR==1") == "yes" ]; then
-echo -e "{$(date +%M:%S)} Menjalankan go-tun2socks...." >> screenlog.0
-screen -dmS gerbang go-tun2socks -loglevel none -proxyServer 127.0.0.1:1080 -proxyType socks -tunName tun0 -tunAddr 10.0.0.2 -tunGw 10.0.0.1 -tunMask 255.255.255.0;sleep 2
-else
-echo -e "{$(date +%M:%S)} Menjalankan badvpn-tun2socks...." >> screenlog.0
-screen -dmS gerbang badvpn-tun2socks --tundev tun0 --netif-ipaddr 10.0.0.2 --netif-netmask 255.255.255.0 --socks-server-addr 127.0.0.1:1080 --udpgw-remote-server-addr 127.0.0.1:$pudp --udpgw-transparent-dns --loglevel 0;sleep 2
-fi
-ifconfig tun0 10.0.0.1 netmask 255.255.255.0 2>/dev/null
-echo -e "{$(date +%M:%S)} Routing Host, IP Gateway dan dns.." >> screenlog.0
-route add default gw 10.0.0.2 metric 0 2>/dev/null
+pudp=$(grep pudp config.txt 2>/dev/null|awk -F "=" '{print $2}'|awk '{print $1}')
+if [ -z "$pudp" ]; then pudp=7300; fi
+jalankan_tun2socks 1080 "$pudp"
 iptables -t nat -I PREROUTING -p udp --dport 53 -j REDIRECT --to-ports 53 2>/dev/null
 iptables -t nat -I PREROUTING -p tcp --dport 53 -j REDIRECT --to-ports 53 2>/dev/null
 /etc/init.d/https-dns-proxy restart 2>/dev/null
@@ -1638,16 +1563,16 @@ interf=\$(ip r|grep default|awk '{print \$3}'|awk 'NR==1')
   ipg=\$(ip r|grep default|awk '{print \$3}');interf=\$(ip r|grep default|awk '{print \$5}')
   ip route add $host dev \$interf via \$ipg 2>/dev/null
   ip route add 8.8.8.8 \$interf via \$ipg 2>/dev/null
-  route del default;ip route add default dev \$interf via \$ipg metric 1 2>/dev/null
+  ip route replace default dev \$interf via \$ipg metric 10 2>/dev/null
   else
   type=gw;route add $host \$type \$interf 2>/dev/null
   route add 8.8.8.8 \$type \$interf 2>/dev/null
-  route del default;route add default \$type \$interf metric 1 2>/dev/null
+  ip route replace default dev \$interf via \$ipg metric 10 2>/dev/null
    fi
  else
   type=dev;route add $host \$type \$interf 2>/dev/null
   route add 8.8.8.8 \$type \$interf 2>/dev/null
-  route del default;route add default \$type \$interf metric 1 2>/dev/null
+  ip route replace default dev \$interf via \$ipg metric 10 2>/dev/null
   fi
  else
   break
@@ -1660,7 +1585,7 @@ if ! screen -ls 2>/dev/null | grep -q injekws; then
   sleep 2
 fi
 screen -dmS xdermr sshpass -p \"$pass\" ssh -oTCPKeepAlive=yes -oServerAliveInterval=25 -oServerAliveCountMax=3 -oStrictHostKeyChecking=no -CND 127.0.0.1:1080 -p $port $user@$host -o \"Proxycommand=corkscrew 127.0.0.1 8789 %h %p\";sleep 7
-route add default gw 10.0.0.2 metric 0 2>/dev/null;n=0
+ip route replace default via 10.0.0.2 dev tun0 metric 1 2>/dev/null || route add default gw 10.0.0.2 metric 1 2>/dev/null;n=0
  while [ \$n != 5 ]; do
 r=\$(curl -m4 88.198.46.60 -w \"%{http_code}\" -s -o /dev/null|head -c2)
   if [ \"\$r\" == \"30\" ] || [ \"\$r\" == \"20\" ]; then
