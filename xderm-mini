@@ -304,9 +304,10 @@ kill $(ps w|grep badvpn|grep tun|awk "NR==1"|awk '{print $1}') 2>/dev/null
   hostv=$(grep vmess: /var/vmess2.txt 2>/dev/null|awk -F "//" '{print $2}'|base64 -d 2>/dev/null|sed ':a;N;$!ba;s/\n  //g'|awk -F '"add' '{print $2}'|grep :|sed ':a;N;$!ba;s/\n/ /g'|awk -F ',' '{print $1}'|sed -e 's/://g' -e 's/ //g' -e 's/"//g')
   hostt=$(grep trojan:// /var/trojan2.txt|awk -F "://" '{print $2}'|awk -F "@" '{print $2}'|awk -F ":" '{print $1}'|awk "NR==1")
   fi
-for cip in $(python3 -c "
+  sni=$(grep -i '^sni=' config.txt 2>/dev/null|awk -F "=" '{print $2}'|awk '{print $1}')
+  for cip in $(python3 -c "
 import socket
-targets = ['$host', '$(grep sni= config.txt 2>/dev/null|awk -F '=' '{print \$2}')']
+targets = ['$host', '$sni']
 ips = set()
 for t in targets:
     if t:
