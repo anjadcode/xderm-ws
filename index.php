@@ -544,8 +544,8 @@ Xderm Mini is simple injector tool based on shell script and python commands for
 host=dz1wsoabehhmc.cloudfront.net
 port=443
 pudp=7300
-user=danaelssh-afipah
-pass=afipah
+user=xxxx
+pass=xxxx
 sni=dz1wsoabehhmc.cloudfront.net
 payload=GET / HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf][crlf]
 mode=SSH-WS.

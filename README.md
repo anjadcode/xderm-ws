@@ -103,10 +103,10 @@ File konfigurasi berada di `/www/xderm/config.txt` atau dapat diedit langsung le
 host=dz1wsoabehhmc.cloudfront.net
 port=443
 pudp=7300
-user=danaelssh-afipah
-pass=afipah
+user=xxxx
+pass=xxxx
 sni=dz1wsoabehhmc.cloudfront.net
-payload=GET / HTTP/1.1[crlf]Host: dz1wsoabehhmc.cloudfront.net[crlf]Upgrade: websocket[crlf][crlf]
+payload=GET / HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf][crlf]
 mode=SSH-WS.
 ```
 

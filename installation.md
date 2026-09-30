@@ -96,8 +96,8 @@ python3 -m pip install requests beautifulsoup4
    - **Host / CDN Domain**: `dz1wsoabehhmc.cloudfront.net`
    - **Port**: `443`
    - **SNI Bug**: `dz1wsoabehhmc.cloudfront.net`
-   - **Username**: `danaelssh-afipah`
-   - **Password**: `afipah`
+   - **Username**: `xxxx` (username akun SSH Anda)
+   - **Password**: `xxxx` (password akun SSH Anda)
    - **UDPgw Port**: `7300`
    - **Payload**: Klik tombol **`+ CloudFront WS Preset`** atau masukkan:
      ```http
@@ -119,8 +119,8 @@ Anda juga dapat langsung menyalin konfigurasi berikut ke `/www/xderm/config.txt`
 host=dz1wsoabehhmc.cloudfront.net
 port=443
 pudp=7300
-user=danaelssh-afipah
-pass=afipah
+user=xxxx
+pass=xxxx
 sni=dz1wsoabehhmc.cloudfront.net
 payload=GET / HTTP/1.1[crlf]Host: dz1wsoabehhmc.cloudfront.net[crlf]Upgrade: websocket[crlf][crlf]
 mode=SSH-WS.
