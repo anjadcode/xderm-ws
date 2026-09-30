@@ -127,12 +127,58 @@ sni = $sni" > /tmp/stunnel.conf
 killall -q stunnel
 stunnel /tmp/stunnel.conf
 }
+ injekws () {
+host=$(grep -i '^host=' config.txt 2>/dev/null|awk -F "=" '{print $2}'|awk '{print $1}')
+port=$(grep -i '^port=' config.txt 2>/dev/null|awk -F "=" '{print $2}'|awk '{print $1}')
+sni=$(grep -i '^sni=' config.txt 2>/dev/null|awk -F "=" '{print $2}'|awk '{print $1}')
+payload=$(grep -i '^payload=' config.txt 2>/dev/null|sed 's/^payload=//I')
+killall -q python3 2>/dev/null
+kill $(screen -ls 2>/dev/null|grep injekws|awk -F '.' '{print $1}'|awk '{print $1}') 2>/dev/null
+WSSCRIPT=""
+if [ -f /www/xderm/xderm_ws.py ]; then
+  WSSCRIPT="/www/xderm/xderm_ws.py"
+elif [ -f "$(dirname "$0")/xderm_ws.py" ]; then
+  WSSCRIPT="$(dirname "$0")/xderm_ws.py"
+elif [ -f "./xderm_ws.py" ]; then
+  WSSCRIPT="./xderm_ws.py"
+fi
+if [ -n "$WSSCRIPT" ]; then
+  screen -dmS injekws python3 "$WSSCRIPT" --listen 127.0.0.1 --port 8789 --host "$host" --rport "$port" --sni "$sni" --payload "$payload"
+fi
+}
+ set_firewall () {
+if command -v nft >/dev/null 2>&1; then
+  nft delete table inet xderm 2>/dev/null
+  nft add table inet xderm 2>/dev/null
+  nft 'add chain inet xderm postrouting { type nat hook postrouting priority srcnat; policy accept; }' 2>/dev/null
+  nft 'add rule inet xderm postrouting oifname "tun0" masquerade' 2>/dev/null
+  nft 'add chain inet xderm prerouting { type nat hook prerouting priority dstnat; policy accept; }' 2>/dev/null
+  nft 'add rule inet xderm prerouting meta l4proto udp th dport 53 redirect to :53' 2>/dev/null
+  nft 'add rule inet xderm prerouting meta l4proto tcp th dport 53 redirect to :53' 2>/dev/null
+fi
+if command -v iptables >/dev/null 2>&1; then
+  iptables -t nat -A POSTROUTING -o tun0 -j MASQUERADE 2>/dev/null
+  iptables -t nat -I PREROUTING -p udp --dport 53 -j REDIRECT --to-ports 53 2>/dev/null
+  iptables -t nat -I PREROUTING -p tcp --dport 53 -j REDIRECT --to-ports 53 2>/dev/null
+fi
+}
+ flush_firewall () {
+if command -v nft >/dev/null 2>&1; then
+  nft delete table inet xderm 2>/dev/null
+fi
+if command -v iptables >/dev/null 2>&1; then
+  iptables -t nat -D POSTROUTING -o tun0 -j MASQUERADE 2>/dev/null
+  iptables -t nat -D PREROUTING -p udp --dport 53 -j REDIRECT --to-ports 53 2>/dev/null
+  iptables -t nat -D PREROUTING -p tcp --dport 53 -j REDIRECT --to-ports 53 2>/dev/null
+fi
+}
  routing () {
 mode=$(cat /www/xderm/config/mode.default|sed 's/\.//g')
 host=$(grep host= config.txt|awk -F "=" '{print $2}')
+sni=$(grep sni= config.txt 2>/dev/null|awk -F "=" '{print $2}')
 hostt=$(grep trojan:// /var/trojan2.txt|awk -F "://" '{print $2}'|awk -F "@" '{print $2}'|awk -F ":" '{print $1}'|awk "NR==1")
 hostv=$(grep vmess: /var/vmess2.txt 2>/dev/null|awk -F "//" '{print $2}'|base64 -d 2>/dev/null|sed ':a;N;$!ba;s/\n  //g'|awk -F '"add' '{print $2}'|grep :|sed ':a;N;$!ba;s/\n/ /g'|awk -F ',' '{print $1}'|sed -e 's/://g' -e 's/ //g' -e 's/"//g')
-  if [ $mode == "SSH" ]; then
+  if [ "$mode" == "SSH" ] || [ "$mode" == "SSH-WS" ]; then
     if [ -f $host ]; then
      echo "Akun SSH belom disetting!" >> screenlog.0
      exit
@@ -158,12 +204,14 @@ ifaces=$(ip r|grep default|awk '{print $3}')
    if [ $(echo $ifaces|awk -F "." '{print $4}'|wc -c) != "2" ]; then
   ipg=$(ip r|grep default|awk '{print $3}');ifaces=$(ip r|grep default|awk '{print $5}')
   ip route add $host dev $ifaces via $ipg 2>/dev/null
+  if [ -n "$sni" ] && [ "$sni" != "$host" ]; then ip route add $sni dev $ifaces via $ipg 2>/dev/null; fi
   ip route add $hostt dev $ifaces via $ipg 2>/dev/null
   ip route add $hostv dev $ifaces via $ipg 2>/dev/null
   ip route add 8.8.8.8 $ifaces via $ipg 2>/dev/null
   route del default;ip route add default dev $ifaces via $ipg metric 1 2>/dev/null
   else
   type=gw;route add $host $type $ifaces 2>/dev/null
+  if [ -n "$sni" ] && [ "$sni" != "$host" ]; then route add $sni $type $ifaces 2>/dev/null; fi
   route add $hostt $type $ifaces 2>/dev/null
   route add $hostv $type $ifaces 2>/dev/null
   route add 8.8.8.8 $type $ifaces 2>/dev/null
@@ -171,6 +219,7 @@ ifaces=$(ip r|grep default|awk '{print $3}')
    fi
  else
   type=dev;route add $host $type $ifaces 2>/dev/null
+  if [ -n "$sni" ] && [ "$sni" != "$host" ]; then route add $sni $type $ifaces 2>/dev/null; fi
   route add $hostt $type $ifaces 2>/dev/null
   route add $hostv $type $ifaces 2>/dev/null
   route add 8.8.8.8 $type $ifaces 2>/dev/null
@@ -188,9 +237,11 @@ killall -q sshpass vpn stunnel openvpn
 killall -q trojan v2ray badvpn-tun2socks
 killall -q autorekonek automode go-tun2socks
 kill $(ps w|grep python3|grep xderm.py|awk "NR==1"|awk '{print $1}') 2>/dev/null
+kill $(ps w|grep python3|grep xderm_ws.py|awk "NR==1"|awk '{print $1}') 2>/dev/null
+kill $(screen -ls 2>/dev/null|grep injekws|awk -F '.' '{print $1}'|awk '{print $1}') 2>/dev/null
 kill $(ps w|grep badvpn|grep tun|awk "NR==1"|awk '{print $1}') 2>/dev/null
  mode=$(cat /www/xderm/config/mode.default|sed 's/\.//g')
-  if [ $mode == "SSH" ]; then
+  if [ "$mode" == "SSH" ] || [ "$mode" == "SSH-WS" ]; then
   host=$(grep host= config.txt|awk -F "=" '{print $2}')
   elif [ $mode == "Vmess" ]; then
    port=$(grep vmess: /var/vmess2.txt 2>/dev/null|awk -F "//" '{print $2}'|base64 -d 2>/dev/null|sed ':a;N;$!ba;s/\n  //g'|awk -F '"port' '{print $2}'|grep :|sed ':a;N;$!ba;s/\n/ /g'|awk -F ',' '{print $1}'|sed -e 's/://g' -e 's/ //g' -e 's/"//g')
@@ -206,6 +257,8 @@ kill $(ps w|grep badvpn|grep tun|awk "NR==1"|awk '{print $1}') 2>/dev/null
   hostt=$(grep trojan:// /var/trojan2.txt|awk -F "://" '{print $2}'|awk -F "@" '{print $2}'|awk -F ":" '{print $1}'|awk "NR==1")
   fi
 route del $host 2>/dev/null;route del $hostt 2>/dev/null;route del $hostv 2>/dev/null;route del 8.8.8.8 2>/dev/null
+flush_firewall
+killall -q badvpn-udpgw 2>/dev/null
 screen -d -m ip link delete tun0 2>/dev/null;screen -d -m ip link delete tun1 2>/dev/null
 /etc/init.d/https-dns-proxy stop 2>/dev/null
 host=$(grep vmess: /var/vmess2.txt 2>/dev/null|awk -F "//" '{print $2}'|base64 -d 2>/dev/null|sed ':a;N;$!ba;s/\n  //g'|awk -F '"add' '{print $2}'|grep :|sed ':a;N;$!ba;s/\n/ /g'|awk -F ',' '{print $1}'|sed -e 's/://g' -e 's/ //g' -e 's/"//g');route del $host 2>/dev/null
@@ -367,6 +420,16 @@ fi
   echo -e " tidak ada paket timeout, install dulu!" >> screenlog.0
   echo -e " Gunakan Koneksi normal dan" >> screenlog.0
   echo -e " opkg update && opkg install coreutils-timeout" >> screenlog.0
+  exit
+ fi
+ if [ -z "$(which python3 2>/dev/null)" ] && [ ! -f /usr/bin/python3 ]; then
+  echo -e " Paket python3 belom terinstall, install dulu!" >> screenlog.0
+  echo -e " opkg update && opkg install python3" >> screenlog.0
+  exit
+ fi
+ if [ -z "$(which curl 2>/dev/null)" ] && [ ! -f /usr/bin/curl ]; then
+  echo -e " Paket curl belom terinstall, install dulu!" >> screenlog.0
+  echo -e " opkg update && opkg install curl" >> screenlog.0
   exit
  fi
 touch /etc/crontabs/root
@@ -637,13 +700,11 @@ echo -e "{$(date +%M:%S)} SSH-ssl: $host, P: $pingsshx" >> screenlog.0
 echo "*************************************************" >> screenlog.0
 echo -e "{$(date +%M:%S)} Memilih Mode tercepat saat ini [$nama]" >> screenlog.0
 echo $nama >/tmp/currentmode.txt
- if [ $(cat /www/xderm/config/firewall|awk "NR==1") == "yes" ]; then
+  if [ $(cat /www/xderm/config/firewall|awk "NR==1") == "yes" ]; then
 echo -e "{$(date +%M:%S)} Memuat ulang Firewall...." >> screenlog.0
 xtable=$(/etc/init.d/firewall reload 2>/dev/null)
- fi
-  if [ -f $(iptables -t nat -L|grep MASQ|grep tcp|awk '{print $1}'|awk "NR==1") ]; then
-iptables -A POSTROUTING --proto tcp -t nat -o tun0 -j MASQUERADE 2>/dev/null
   fi
+set_firewall
 pudp=$(grep pudp config.txt|awk -F "=" '{print $2}')
   if [ -f $(cat /www/xderm/config/firewall|awk "NR==1") ]; then
    echo no > /www/xderm/config/gotun
@@ -974,9 +1035,7 @@ echo -e "{$(date +%M:%S)} Menjalankan VMESS (latarbelakang)...." >> screenlog.0
 echo -e "{$(date +%M:%S)} Memuat ulang Firewall...." >> screenlog.0
 xtable=$(/etc/init.d/firewall reload 2>/dev/null)
  fi
- if [ -f $(iptables -t nat -L|grep MASQ|grep tcp|awk '{print $1}'|awk "NR==1") ]; then
-iptables -A POSTROUTING --proto tcp -t nat -o tun0 -j MASQUERADE 2>/dev/null
- fi
+set_firewall
 pudp=$(grep pudp config.txt|awk -F "=" '{print $2}')
   if [ -f $(cat /www/xderm/config/firewall|awk "NR==1") ]; then
    echo no > /www/xderm/config/gotun
@@ -1076,9 +1135,7 @@ screen -dmS troj trojan -c /tmp/trojan.conf;sleep 1
 echo -e "{$(date +%M:%S)} Memuat ulang Firewall...." >> screenlog.0
 xtable=$(/etc/init.d/firewall reload 2>/dev/null)
  fi
- if [ -f $(iptables -t nat -L|grep MASQ|grep tcp|awk '{print $1}'|awk "NR==1") ]; then
-iptables -A POSTROUTING --proto tcp -t nat -o tun0 -j MASQUERADE 2>/dev/null
- fi
+set_firewall
 pudp=$(grep pudp config.txt|awk -F "=" '{print $2}')
   if [ -f $(cat /www/xderm/config/gotun|awk "NR==1") ]; then
    echo no > /www/xderm/config/gotun
@@ -1304,6 +1361,10 @@ screen -dmS gerbang badvpn-tun2socks --tundev tun0 --netif-ipaddr 10.0.0.2 --net
 ifconfig tun0 10.0.0.1 netmask 255.255.255.0 2>/dev/null
 echo -e "{$(date +%M:%S)} Routing Host, IP Gateway dan dns.." >> screenlog.0
 route add default gw 10.0.0.2 metric 0 2>/dev/null
+iptables -t nat -I PREROUTING -p udp --dport 53 -j REDIRECT --to-ports 53 2>/dev/null
+iptables -t nat -I PREROUTING -p tcp --dport 53 -j REDIRECT --to-ports 53 2>/dev/null
+/etc/init.d/https-dns-proxy restart 2>/dev/null
+/etc/init.d/dnsmasq restart 2>/dev/null
 echo -e "{$(date +%M:%S)} Menjalankan rekonek otomatis..." >> screenlog.0
 echo "#!/bin/bash
 p=0
@@ -1386,6 +1447,180 @@ echo -e \"{\$(date +%M:%S)} Gagal, Mencoba ulang....\" >> /www/xderm/screenlog.0
 sleep 1;((n++))
  done
  fi
+  fi
+sleep 1
+done" > /tmp/autorekonek;cd /tmp;chmod +x autorekonek
+screen -dmS auto ./autorekonek;sleep 1;rm -rf autorekonek
+elif [ "$mode" == "SSH-WS" ]; then
+host=$(grep host= config.txt|awk -F "=" '{print $2}'|awk '{print $1}')
+ if [ -f $host ]; then
+echo -e "{$(date +%M:%S)} Config SSH-WS belom disetting !!" >> screenlog.0
+sleep 1;exit
+ fi
+port=$(grep port= config.txt|awk -F "=" '{print $2}'|awk '{print $1}')
+user=$(grep user= config.txt|awk -F "=" '{print $2}'|awk '{print $1}')
+pass=$(grep pass= config.txt|awk -F "=" '{print $2}'|awk '{print $1}')
+sni=$(grep sni= config.txt|awk -F "=" '{print $2}'|awk '{print $1}')
+payload=$(grep -i '^payload=' config.txt 2>/dev/null|sed 's/^payload=//I')
+#########################
+flushx;routing
+echo -e "{$(date +%M:%S)} Mode yang dipilih: [$mode]" >> screenlog.0
+waitmodem=$(cat /www/xderm/config/modem)
+ if [ -f $waitmodem ]; then
+echo no > /www/xderm/config/modem
+ fi
+  if [ $waitmodem == "yes" ]; then
+echo -ne "{$(date +%M:%S)} Menunggu Sumber Internet... " >> screenlog.0
+ while true; do
+interf=$(ip r|grep default|sed 's/default via 10.0.0//g'|grep default|awk '{print $3}'|awk 'NR==1'|awk -F. '{print $1}')
+    if [ -f $interf ]; then
+     sleep 2;continue
+     else
+  if [ ! -f $(timeout 3 ping $sni -c1 -w1 2>/dev/null|awk -F '(' '{print $2}'|awk "NR==1"|awk -F. '{print $1}'|awk '{print $1}') ]; then
+   echo OK >> screenlog.0;break
+  fi 
+   fi
+ done
+  fi
+###########################
+if [ "$port" == "443" ]; then
+echo "#!/bin/bash
+sleep 10;killall -q openssl" > /tmp/timeou;chmod +x /tmp/timeou;screen -dmS cb /tmp/timeou
+echo -ne "{$(date +%M:%S)} Menguji bug SNI (openssl).. " >> screenlog.0
+supp=$(echo "QUIT"|openssl s_client -connect 8.8.8.8:443 -servername $sni 2>/dev/null|grep supp|awk '{print $4}')
+ if [ ! -f $supp ]; then
+echo "OK" >> screenlog.0
+else
+killall -q openssl timeou;screen -dmS cb /tmp/timeou
+ supp=$(echo "QUIT"|openssl s_client -connect 8.8.8.8:443 -servername $sni 2>/dev/null|grep supp|awk '{print $4}')
+   if [ ! -f $supp ]; then
+echo "OK" >> screenlog.0
+ else
+killall -q openssl timeou
+echo "Closed!" >> screenlog.0;exit
+   fi 
+ fi
+killall -q openssl timeou;rm -rf /tmp/timeou
+fi
+echo -ne "{$(date +%M:%S)} Menjalankan Inject SSH-WS CDN.. " >> screenlog.0
+injekws;echo "[python-ws]" >> screenlog.0
+sleep 1
+echo "##############################################" >> screenlog.0
+hostip=$(ping $host -w1 -c1 2>/dev/null|awk "NR==1"|awk -F '(' '{print $2}'|awk -F ')' '{print $1}')
+if [ -z "$hostip" ]; then hostip=$host; fi
+echo "  Host: $host ($hostip)" >> screenlog.0
+echo "  Port: $port" >> screenlog.0
+echo "  SNI : $sni" >> screenlog.0
+echo "  User: $user" >> screenlog.0
+echo "  Pass: ********" >> screenlog.0
+echo "  Port UDPgw: $pudp" >> screenlog.0
+echo "##############################################" >> screenlog.0
+echo -e "{$(date +%M:%S)} Menjalankan SSH Client (latarbelakang)...." >> screenlog.0
+rm -rf /root/.ssh/known_hosts* /www/xderm/log/screenlog.0;cd /www/xderm/log 2>/dev/null
+screen -L -dmS xderm sshpass -p "$pass" ssh -oTCPKeepAlive=yes -oServerAliveInterval=180 -oServerAliveCountMax=2 -oStrictHostKeyChecking=no -CND 127.0.0.1:1080 -p $port $user@$host -o "Proxycommand=corkscrew 127.0.0.1 8789 %h %p"
+sleep 2;n=0;xxx="lanjut";echo -ne "{$(date +%M:%S)} Menguji Koneksi... " >> ../screenlog.0
+while [ $n != 7 ]; do
+ if [ ! -f $(grep Permission screenlog.0 2>/dev/null|awk "NR==1"|awk '{print $4}') ]; then
+     cd /www/xderm;echo "Not Connect!" >> screenlog.0
+     echo -e '<pre><h2 style="color:#006400" "text-overflow:ellipsis">Username/Password Salah/Kadaluarsa.</h2></pre>' >> screenlog.0
+     flushx;echo -e "{$(date +%M:%S)} Berhenti." >> screenlog.0
+     exit
+ fi
+r=$(curl -m4 88.198.46.60 -w "%{http_code}" --proxy socks5://127.0.0.1:1080 -s -o /dev/null|head -c2)
+  if [ "$r" == "30" ] || [ "$r" == "20" ]; then
+  echo '<pre><h2 style="color:#006400" "text-overflow:ellipsis">HTTP/1.1 200 OK</h2></pre>' >> ../screenlog.0
+  xxx="no";break
+  fi
+((n++));sleep 1
+done
+if [ "$xxx" == "lanjut" ]; then
+ cd /www/xderm;echo "Not Connect!" >> screenlog.0
+ flushx;echo -e "{$(date +%M:%S)} Berhenti." >> screenlog.0
+ exit
+fi
+cd /www/xderm 2>/dev/null
+############################################################
+if [ $(cat /www/xderm/config/firewall|awk "NR==1") == "yes" ]; then
+echo -e "{$(date +%M:%S)} Memuat ulang Firewall...." >> screenlog.0
+xtable=$(/etc/init.d/firewall reload 2>/dev/null)
+fi
+set_firewall
+pudp=$(grep pudp config.txt|awk -F "=" '{print $2}')
+if [ -f $(cat /www/xderm/config/firewall|awk "NR==1") ]; then
+ echo no > /www/xderm/config/gotun
+fi
+if [ -f $(cat /www/xderm/config/gotun|awk "NR==1") ]; then
+ echo no > /www/xderm/config/gotun
+fi
+if [ $(cat /www/xderm/config/gotun|awk "NR==1") == "yes" ]; then
+echo -e "{$(date +%M:%S)} Menjalankan go-tun2socks...." >> screenlog.0
+screen -dmS gerbang go-tun2socks -loglevel none -proxyServer 127.0.0.1:1080 -proxyType socks -tunName tun0 -tunAddr 10.0.0.2 -tunGw 10.0.0.1 -tunMask 255.255.255.0;sleep 2
+else
+echo -e "{$(date +%M:%S)} Menjalankan badvpn-tun2socks...." >> screenlog.0
+screen -dmS gerbang badvpn-tun2socks --tundev tun0 --netif-ipaddr 10.0.0.2 --netif-netmask 255.255.255.0 --socks-server-addr 127.0.0.1:1080 --udpgw-remote-server-addr 127.0.0.1:$pudp --udpgw-transparent-dns --loglevel 0;sleep 2
+fi
+ifconfig tun0 10.0.0.1 netmask 255.255.255.0 2>/dev/null
+echo -e "{$(date +%M:%S)} Routing Host, IP Gateway dan dns.." >> screenlog.0
+route add default gw 10.0.0.2 metric 0 2>/dev/null
+iptables -t nat -I PREROUTING -p udp --dport 53 -j REDIRECT --to-ports 53 2>/dev/null
+iptables -t nat -I PREROUTING -p tcp --dport 53 -j REDIRECT --to-ports 53 2>/dev/null
+/etc/init.d/https-dns-proxy restart 2>/dev/null
+/etc/init.d/dnsmasq restart 2>/dev/null
+echo -e "{$(date +%M:%S)} Menjalankan rekonek otomatis..." >> screenlog.0
+echo "#!/bin/bash
+p=0
+while true; do
+ if [ ! -f \$(ip r|grep $host|awk 'NR==1'|awk '{print \$1}') ]; then
+r=\$(curl -m50 google.com -w \"%{http_code}\" --proxy socks5://127.0.0.1:1080 -s -o /dev/null|head -c2);sleep 2
+ else
+r=0
+ fi
+  if [ \$r != 30 ] && [ \$r != 20 ]; then
+killall -q sshpass;rm -rf /root/.ssh/known_hosts*;route del default dev tun0 2>/dev/null
+((p++));echo \"         (Jumlah AutoRekonek: \$p)\" > /www/xderm/screenlog.0
+echo \"**********************************************\" >> /www/xderm/screenlog.0
+echo -e \"{\$(date +%M:%S)} Koneksi Hilang !! Menunggu Sumber....\" >> /www/xderm/screenlog.0
+ while true; do
+ if [ -f \$(ip r|grep $host|awk 'NR==1'|awk '{print \$1}') ]; then
+interf=\$(ip r|grep default|awk '{print \$3}'|awk 'NR==1')
+    if [ -f \$interf ]; then
+     sleep 2;continue
+    fi
+  if [ ! -f \$(echo \$interf|awk -F '.' '{print \$2}') ]; then
+   if [ \$(echo \$interf|awk -F '.' '{print \$4}'|wc -c) != \"2\" ]; then
+  ipg=\$(ip r|grep default|awk '{print \$3}');interf=\$(ip r|grep default|awk '{print \$5}')
+  ip route add $host dev \$interf via \$ipg 2>/dev/null
+  ip route add 8.8.8.8 \$interf via \$ipg 2>/dev/null
+  route del default;ip route add default dev \$interf via \$ipg metric 1 2>/dev/null
+  else
+  type=gw;route add $host \$type \$interf 2>/dev/null
+  route add 8.8.8.8 \$type \$interf 2>/dev/null
+  route del default;route add default \$type \$interf metric 1 2>/dev/null
+   fi
+ else
+  type=dev;route add $host \$type \$interf 2>/dev/null
+  route add 8.8.8.8 \$type \$interf 2>/dev/null
+  route del default;route add default \$type \$interf metric 1 2>/dev/null
+  fi
+ else
+  break
+ fi
+sleep 2
+ done
+echo -e \"{\$(date +%M:%S)} Memperbaiki Koneksi + Routing Ulang.. \" >> /www/xderm/screenlog.0
+screen -dmS xdermr sshpass -p \"$pass\" ssh -oTCPKeepAlive=yes -oServerAliveInterval=180 -oServerAliveCountMax=2 -oStrictHostKeyChecking=no -CND 127.0.0.1:1080 -p $port $user@$host -o \"Proxycommand=corkscrew 127.0.0.1 8789 %h %p\";sleep 7
+route add default gw 10.0.0.2 metric 0 2>/dev/null;n=0
+ while [ \$n != 5 ]; do
+r=\$(curl -m4 88.198.46.60 -w \"%{http_code}\" -s -o /dev/null|head -c2)
+  if [ \"\$r\" == \"30\" ] || [ \"\$r\" == \"20\" ]; then
+   echo '<pre><h2 style=\"color:#006400\" \"text-overflow:ellipsis\">HTTP/1.1 200 OK</h2></pre>' >> /www/xderm/screenlog.0
+   n=ok;echo -e \"{\$(date +%M:%S)} Selesai.\" >> /www/xderm/screenlog.0;break
+  fi
+ if [ \$n -eq 4 ]; then
+echo -e \"{\$(date +%M:%S)} Gagal, Mencoba ulang....\" >> /www/xderm/screenlog.0
+ fi
+sleep 1;((n++))
+ done
   fi
 sleep 1
 done" > /tmp/autorekonek;cd /tmp;chmod +x autorekonek

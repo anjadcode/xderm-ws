@@ -345,6 +345,7 @@ function xderm_config_setup() {
 		CFGUSER=$(grep user $XDERMCONFIGFILE | sed 's/.*user=//')
 		CFGPASS=$(grep pass $XDERMCONFIGFILE | sed 's/.*pass=//')
 		CFGSNI=$(grep sni $XDERMCONFIGFILE | sed 's/.*sni=//')
+		CFGPAYLOAD=$(grep -i '^payload=' $XDERMCONFIGFILE 2>/dev/null | sed 's/.*payload=//I')
 		CFGVMESS=$(grep -i vmess:// $XDERMCONFIGFILE)
 		CFGTROJAN=$(grep -i trojan:// $XDERMCONFIGFILE)
 	else
@@ -354,17 +355,20 @@ function xderm_config_setup() {
 		CFGUSER="$CFGHOST"
 		CFGPASS="$CFGHOST"
 		CFGSNI="$CFGHOST"
+		CFGPAYLOAD=""
 		CFGVMESS="$CFGHOST"
 		CFGTROJAN="$CFGHOST"
 	fi
 
-	if [[ $(grep "mode=0" $XDERMCONFIGFILE) || $(grep SSH $XDERMPATH/config/mode.default) ]]; then
+	if [[ $(grep "mode=4" $XDERMCONFIGFILE) || $(grep "SSH-WS" $XDERMPATH/config/mode.default 2>/dev/null) ]]; then
+		CFGMODEINFO="SSH-WS."
+	elif [[ $(grep "mode=0" $XDERMCONFIGFILE) || $(grep -w "SSH" $XDERMPATH/config/mode.default 2>/dev/null) ]]; then
 		CFGMODEINFO="SSH."
-	elif [[ $(grep "mode=1" $XDERMCONFIGFILE) || $(grep Vmess $XDERMPATH/config/mode.default) ]]; then
+	elif [[ $(grep "mode=1" $XDERMCONFIGFILE) || $(grep Vmess $XDERMPATH/config/mode.default 2>/dev/null) ]]; then
 		CFGMODEINFO="Vmess."
-	elif [[ $(grep "mode=2" $XDERMCONFIGFILE) || $(grep Trojan $XDERMPATH/config/mode.default) ]]; then
+	elif [[ $(grep "mode=2" $XDERMCONFIGFILE) || $(grep Trojan $XDERMPATH/config/mode.default 2>/dev/null) ]]; then
 		CFGMODEINFO="Trojan."
-	elif [[ $(grep "mode=3" $XDERMCONFIGFILE) || $(grep Multi $XDERMPATH/config/mode.default) ]]; then
+	elif [[ $(grep "mode=3" $XDERMCONFIGFILE) || $(grep Multi $XDERMPATH/config/mode.default 2>/dev/null) ]]; then
 		CFGMODEINFO="Multi."
 	else
 		CFGMODEINFO="${RED}Unset"
@@ -373,6 +377,8 @@ function xderm_config_setup() {
 	
 	if [[ $CFGMODEINFO == "SSH." ]]; then
 		CFGMODE="0"
+	elif [[ $CFGMODEINFO == "SSH-WS." ]]; then
+		CFGMODE="4"
 	elif [[ $CFGMODEINFO == "Vmess." ]]; then
 		CFGMODE="1"
 	elif [[ $CFGMODEINFO == "Trojan." ]]; then
@@ -661,8 +667,9 @@ function xderm_config_setup() {
 		echo -e "    1 for Vmess" 
 		echo -e "    2 for Trojan" 
 		echo -e "    3 for Multi Inject (SSH, Vmess & Trojan)" 
+		echo -e "    4 for SSH-WS (WebSocket CDN)"
 		echo -e "==========================================="
-		echo -e "  Enter Inject Mode Number (0~3) : " 
+		echo -e "  Enter Inject Mode Number (0~4) : " 
 		echo -e "==========================================="
 		echo -n "  " 
 		read -r NEWMODE
@@ -672,6 +679,9 @@ function xderm_config_setup() {
 		echo -e "user=$CFGUSER" >> $XDERMCONFIGFILE
 		echo -e "pass=$CFGPASS" >> $XDERMCONFIGFILE
 		echo -e "sni=$CFGSNI" >> $XDERMCONFIGFILE
+		if [[ -n "$CFGPAYLOAD" ]]; then
+			echo -e "payload=$CFGPAYLOAD" >> $XDERMCONFIGFILE
+		fi
 		echo -e "$CFGVMESS" >> $XDERMCONFIGFILE
 		echo -e "$CFGTROJAN" >> $XDERMCONFIGFILE
 		echo -e "mode=$NEWMODE" >> $XDERMCONFIGFILE
@@ -684,6 +694,8 @@ function xderm_config_setup() {
 			CFGMODEDEFAULT="Trojan."
 		elif [[ $NEWMODE == "3" ]]; then
 			CFGMODEDEFAULT="Multi."
+		elif [[ $NEWMODE == "4" ]]; then
+			CFGMODEDEFAULT="SSH-WS."
 		fi
 		
 		cat $XDERMCONFIGFILE > $XDERMPATH/config/$CFGUSED

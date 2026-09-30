@@ -4,6 +4,22 @@
 include 'header.php';
 ceklogin();
   };
+
+  // Read active profile and mode for status header
+  $active_prof = "config1";
+  exec("cat config/default 2>/dev/null", $df_prof);
+  if (!empty($df_prof[0])) { $active_prof = trim($df_prof[0]); }
+  
+  $active_mode = "SSH-WS";
+  exec("cat config/mode.default 2>/dev/null", $df_mode);
+  if (!empty($df_mode[0])) { $active_mode = trim(str_replace('.', '', $df_mode[0])); }
+
+  // AJAX handler for clearing log
+  if (isset($_POST['action']) && $_POST['action'] === 'clear_log') {
+    exec("echo > screenlog.0");
+    echo "OK";
+    exit;
+  }
 ?>
 <!DOCTYPE html>
 <html>
@@ -14,173 +30,342 @@ ceklogin();
 <meta charset="UTF-8"><title>Xderm Mini</title>
 <style>
 		body {
-			display: flex; 
-			flex-direction: column; 
-			justify-content: center;
-			min-height: 0vh; 
-			color: black; 
-			background-image:url(img/background.jpg);
-			background-size: cover;
-			-webkit-background-size: cover;
-			background-repeat: no-repeat;
-		}
-		
-		.btn {
-			-moz-appearance: none;
-			cursor: pointer;
-			margin: 5px;
-			align-items: center;
-			border: 2px solid #132130 ;
-			border-radius: 3px;
-			background: #132130;
-		}
-
-		.btn:hover, .btn:focus {
-			color: #000000;
-			outline: 0;
-		}
-		.geser {
-			border-color: #132130;
-			color: #ffffff;
-			padding: 3px 20px;
-			background-image: linear-gradient(45deg, #00ACD0 50%, transparent 50%);
-			background-position: 100%;
-			background-size: 400%;
-			transition: background 300ms ease-in-out;
-		}
-		
-		.geser:hover {
-			 background-position: 0;
-		}
-
-		.script_txt {
-			text-align: left;
-			font-family: cursive;
-			font-weight: bold;			
-			color: #000;
-			border: 8px;
-			border-radius: 10px;
-			background: hsla(0, 0%, 100%, .3);
-			align-items: center;
-			width: 395px;
-			height: 50px;
-		}
-
-		.col-butt {
-			text-align: center;
-			border: 5px;
-			align-items: center;
-		}
-
-		.inline-block {
-			display: inline-block;
-			text-align: left;
-			margin: 5px;
-			top: 0px;
-		}
-		
-		.box_script {
-			width: 450px;
-			border: none;
-			border-radius: 10px;
-			margin: 3% auto;
-			padding: 10px 10px;
-			background-color: black;
-			box-shadow: 0px 0px 5px 2px #132130;
-		}
-		
-		.footer {
-			width: 100%;
-			height: 10px;
+			margin: 0;
+			padding: 10px;
+			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+			color: #e5e7eb;
+			background-color: #111827;
 			display: flex;
+			flex-direction: column;
 			justify-content: center;
 			align-items: center;
+			min-height: 95vh;
+		}
+
+		.box_script {
+			width: 100%;
+			max-width: 520px;
+			background-color: #1f2937;
+			border: 1px solid #374151;
+			border-radius: 10px;
+			padding: 16px;
+			box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+			box-sizing: border-box;
+		}
+
+		.btn {
+			cursor: pointer;
+			padding: 8px 14px;
+			font-size: 13px;
+			font-weight: 600;
+			border: 1px solid #374151;
+			border-radius: 6px;
+			background: #111827;
+			color: #f3f4f6;
+			transition: all 0.2s ease;
+		}
+
+		.btn:hover {
+			background: #374151;
 			color: #ffffff;
+		}
+
+		.btn-start {
+			background: #065f46;
+			border-color: #059669;
+			color: #a7f3d0;
+		}
+		.btn-start:hover {
+			background: #047857;
+			color: #ffffff;
+		}
+		.btn-stop {
+			background: #881337;
+			border-color: #e11d48;
+			color: #fecdd3;
+		}
+		.btn-stop:hover {
+			background: #be123c;
+			color: #ffffff;
+		}
+
+		.nav-bar {
+			display: flex;
+			gap: 6px;
+			justify-content: center;
+			margin: 12px 0;
+			flex-wrap: wrap;
+		}
+
+		.status-bar {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			background: #111827;
+			border: 1px solid #374151;
+			border-radius: 6px;
+			padding: 6px 12px;
+			margin-bottom: 12px;
+			font-size: 12px;
+		}
+
+		.badge {
+			padding: 3px 8px;
+			border-radius: 9999px;
 			font-weight: bold;
-			bottom: 0px;
-			z-index: 1;
-			background: repeating-linear-gradient(-45deg, red 0%, yellow 7.14%, rgb(0,255,0) 14.28%,
-						rgb(0,255,255) 21.4%, cyan 28.56%, blue 35.7%, magenta 42.84%, red 50%);
-			background-size: 600vw 600vw;
-			-webkit-text-fill-color: transparent;
-			-webkit-background-clip: text;
-			animation: slide 10s linear infinite forwards;
+			font-size: 11px;
 		}
-		
-		@keyframes slide {
-			0% {background-position-x: 0%;}
-			100% {background-position-x: 600vw;}
-		}	
-		
-		.blink { 
-			-webkit-animation: blink .75s linear infinite; 
-			-moz-animation: blink .75s linear infinite; 
-			-ms-animation: blink .75s linear infinite; 
-			-o-animation: blink .75s linear infinite; 
-			animation: blink .75s linear infinite; 
-			color: #00ACD0; 
-			font-weight: bold; 
-		} 
+		.badge-connected { background: #065f46; color: #34d399; }
+		.badge-connecting { background: #78350f; color: #fbbf24; }
+		.badge-disconnected { background: #4b5563; color: #9ca3af; }
+		.badge-info { background: #1e3a8a; color: #93c5fd; }
 
-		@-webkit-keyframes blink { 
-			0% { opacity: 1; } 
-			50% { opacity: 1; } 
-			50.01% { opacity: 0; } 
-			100% { opacity: 0; } 
-		} 
+		.terminal-box {
+			background-color: #030712;
+			border: 1px solid #374151;
+			border-radius: 6px;
+			padding: 10px;
+			font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+			font-size: 12px;
+			color: #10b981;
+			height: 220px;
+			overflow-y: auto;
+			text-align: left;
+			white-space: pre-wrap;
+			word-break: break-all;
+		}
 
-		@-moz-keyframes blink { 
-			0% { opacity: 1; }
-			50% { opacity: 1; }
-			50.01% { opacity: 0; } 
-			100% { opacity: 0; } 
+		.log-controls {
+			display: flex;
+			justify-content: flex-end;
+			gap: 6px;
+			margin-bottom: 6px;
 		}
- 
-		@-ms-keyframes blink { 
-			0% { opacity: 1; } 
-			5O% { opacity: 1; }
-			50.01% { opacity: 0; } 
-			100% { opacity: 0; }
+		.btn-log-action {
+			padding: 3px 8px;
+			font-size: 11px;
+			background: #374151;
+			border: none;
+			border-radius: 4px;
+			color: #e5e7eb;
+			cursor: pointer;
 		}
- 
-		@-o-keyframes blink 
-			0% { opacity: 1; } 
-			50% { opacity: 1; }
-			50.01% { opacity: 0; } 
-			100% { opacity: 0; }
+		.btn-log-action:hover { background: #4b5563; }
+
+		/* Form Editor Styles */
+		.config-tabs {
+			display: flex;
+			gap: 4px;
+			margin-bottom: 10px;
+			border-bottom: 1px solid #374151;
+			padding-bottom: 6px;
 		}
- 
-		@keyframes blink { 
-			0% { opacity: 1; } 
-			50% opacity: 1; }
-			50.01% { opacity: 0;} 
-			100% { opacity: 0; } 
+		.tab-btn {
+			padding: 5px 12px;
+			font-size: 12px;
+			font-weight: 600;
+			background: transparent;
+			border: none;
+			border-radius: 4px;
+			color: #9ca3af;
+			cursor: pointer;
 		}
-		
+		.tab-btn.active {
+			background: #374151;
+			color: #ffffff;
+		}
+
+		.form-grid {
+			display: flex;
+			flex-direction: column;
+			gap: 8px;
+			text-align: left;
+		}
+		.form-row {
+			display: flex;
+			gap: 8px;
+		}
+		.form-group {
+			display: flex;
+			flex-direction: column;
+			gap: 3px;
+			flex: 1;
+		}
+		.form-group label {
+			font-size: 11px;
+			font-weight: 600;
+			color: #9ca3af;
+		}
+		.input-field {
+			width: 100%;
+			padding: 6px 8px;
+			background-color: #111827;
+			border: 1px solid #374151;
+			border-radius: 4px;
+			color: #f3f4f6;
+			font-size: 12px;
+			box-sizing: border-box;
+			font-family: inherit;
+		}
+		.input-field:focus {
+			border-color: #10b981;
+			outline: none;
+		}
+
+		.pass-wrapper {
+			position: relative;
+			display: flex;
+			align-items: center;
+		}
+		.btn-toggle-pass {
+			position: absolute;
+			right: 6px;
+			background: none;
+			border: none;
+			color: #9ca3af;
+			cursor: pointer;
+			font-size: 12px;
+		}
+
+		.preset-bar {
+			display: flex;
+			gap: 6px;
+			margin-bottom: 4px;
+		}
+		.btn-preset {
+			padding: 3px 8px;
+			font-size: 10px;
+			background: #064e3b;
+			border: 1px solid #059669;
+			border-radius: 4px;
+			color: #6ee7b7;
+			cursor: pointer;
+		}
+		.btn-preset:hover { background: #047857; color: #ffffff; }
+
+		.options-grid {
+			display: grid;
+			grid-template-columns: repeat(2, 1fr);
+			gap: 6px;
+			margin: 10px 0;
+			text-align: left;
+			font-size: 12px;
+		}
+
+		.footer {
+			margin-top: 14px;
+			font-size: 11px;
+			color: #6b7280;
+			text-align: center;
+		}
+		.footer a { color: #10b981; text-decoration: none; }
 </style>
 <script>
 function shipping_calc() {
   var val = document.getElementById("idconf").value;
- if (val === "config1") {
-   var data = document.getElementById("isi1").value;
-   document.getElementById("isi").value= data;
- }
- if (val === "config2") {
-   var data = document.getElementById("isi2").value;
-   document.getElementById("isi").value= data;
- }
- if (val === "config3") {
-   var data = document.getElementById("isi3").value;
-   document.getElementById("isi").value= data;
- }
- if (val === "config4") {
-   var data = document.getElementById("isi4").value;
-   document.getElementById("isi").value= data;
- }
- if (val === "config5") {
-   var data = document.getElementById("isi5").value;
-   document.getElementById("isi").value= data;
- }
+  var data = "";
+  if (val === "config1") { data = document.getElementById("isi1").value; }
+  else if (val === "config2") { data = document.getElementById("isi2").value; }
+  else if (val === "config3") { data = document.getElementById("isi3").value; }
+  else if (val === "config4") { data = document.getElementById("isi4").value; }
+  else if (val === "config5") { data = document.getElementById("isi5").value; }
+  
+  document.getElementById("isi").value = data;
+  syncRawToForm();
+}
+
+function switchConfigTab(mode) {
+  if (mode === 'form') {
+    document.getElementById("form_editor").style.display = "flex";
+    document.getElementById("raw_editor").style.display = "none";
+    document.getElementById("tab_form").className = "tab-btn active";
+    document.getElementById("tab_raw").className = "tab-btn";
+    syncRawToForm();
+  } else {
+    document.getElementById("form_editor").style.display = "none";
+    document.getElementById("raw_editor").style.display = "block";
+    document.getElementById("tab_form").className = "tab-btn";
+    document.getElementById("tab_raw").className = "tab-btn active";
+    syncFormToRaw();
+  }
+}
+
+function togglePassVisibility() {
+  var passInput = document.getElementById("f_pass");
+  if (passInput.type === "password") {
+    passInput.type = "text";
+  } else {
+    passInput.type = "password";
+  }
+}
+
+function presetCloudFront() {
+  var host = document.getElementById("f_host").value || "dz1wsoabehhmc.cloudfront.net";
+  var payloadInput = document.getElementById("f_payload");
+  payloadInput.value = "GET / HTTP/1.1[crlf]Host: " + host + "[crlf]Upgrade: websocket[crlf][crlf]";
+  syncFormToRaw();
+}
+
+function syncFormToRaw() {
+  var host = document.getElementById("f_host").value.trim();
+  var port = document.getElementById("f_port").value.trim() || "443";
+  var sni = document.getElementById("f_sni").value.trim();
+  var user = document.getElementById("f_user").value.trim();
+  var pass = document.getElementById("f_pass").value.trim();
+  var pudp = document.getElementById("f_pudp").value.trim() || "7300";
+  var payload = document.getElementById("f_payload").value.trim();
+
+  var lines = [];
+  if (host) lines.push("host=" + host);
+  if (port) lines.push("port=" + port);
+  if (pudp) lines.push("pudp=" + pudp);
+  if (user) lines.push("user=" + user);
+  if (pass) lines.push("pass=" + pass);
+  if (sni) lines.push("sni=" + sni);
+  if (payload) lines.push("payload=" + payload);
+
+  document.getElementById("isi").value = lines.join("\n") + "\n";
+}
+
+function syncRawToForm() {
+  var raw = document.getElementById("isi").value;
+  var lines = raw.split("\n");
+  var cfg = {};
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim();
+    if (!line || line.startsWith("#")) continue;
+    var idx = line.indexOf("=");
+    if (idx !== -1) {
+      var k = line.substring(0, idx).trim().toLowerCase();
+      var v = line.substring(idx + 1).trim();
+      cfg[k] = v;
+    }
+  }
+
+  if (document.getElementById("f_host")) document.getElementById("f_host").value = cfg["host"] || "";
+  if (document.getElementById("f_port")) document.getElementById("f_port").value = cfg["port"] || "443";
+  if (document.getElementById("f_sni")) document.getElementById("f_sni").value = cfg["sni"] || "";
+  if (document.getElementById("f_user")) document.getElementById("f_user").value = cfg["user"] || "";
+  if (document.getElementById("f_pass")) document.getElementById("f_pass").value = cfg["pass"] || "";
+  if (document.getElementById("f_pudp")) document.getElementById("f_pudp").value = cfg["pudp"] || "7300";
+  if (document.getElementById("f_payload")) document.getElementById("f_payload").value = cfg["payload"] || "";
+}
+
+function clearLog() {
+  $.post("index.php", { action: "clear_log" }, function() {
+    if (document.getElementById("log")) document.getElementById("log").innerHTML = "";
+    if (document.getElementById("loglain")) document.getElementById("loglain").innerHTML = "";
+  });
+}
+
+function copyLog() {
+  var el = document.getElementById("log") || document.getElementById("loglain");
+  if (el) {
+    var txt = el.innerText;
+    navigator.clipboard.writeText(txt).then(function() {
+      alert("Log berhasil disalin ke clipboard!");
+    });
+  }
 }
 </script>
 <script type="text/javascript">
@@ -188,16 +373,27 @@ function shipping_calc() {
         setInterval(function() {
             $.ajax({
                 url: "screenlog.0",
-		cache: false,
+                cache: false,
                 success: function(result) {
-		    $("#log").html(result);
+                    var el = $("#log");
+                    if (el.length) {
+                        el.html(result);
+                        var textarea = document.getElementById("log");
+                        if (textarea) textarea.scrollTop = textarea.scrollHeight;
+                    }
+                    // Update Status Badge dynamically
+                    var badge = $("#status_badge");
+                    if (badge.length) {
+                        if (result.indexOf("HTTP/1.1 200 OK") !== -1 || result.indexOf("Terhubung") !== -1 || result.indexOf("Sukses") !== -1) {
+                            badge.attr("class", "badge badge-connected").text("● Connected");
+                        } else if (result.indexOf("Menjalankan") !== -1 || result.indexOf("Menguji") !== -1 || result.indexOf("Menghubungkan") !== -1) {
+                            badge.attr("class", "badge badge-connecting").text("● Connecting...");
+                        } else {
+                            badge.attr("class", "badge badge-disconnected").text("● Disconnected");
+                        }
+                    }
                 }
             });
-        $(document).ready(function() {
-                $.ajaxSetup({ cache: false });
-                        });
-                var textarea = document.getElementById("log");
-                textarea.scrollTop = textarea.scrollHeight;
         }, 1000);
     });
     $(document).ready(function() {
@@ -206,372 +402,343 @@ function shipping_calc() {
                 url: "loglain.txt",
                 cache: false,
                 success: function(result) {
-                    $("#loglain").html(result);
+                    var el = $("#loglain");
+                    if (el.length) {
+                        el.html(result);
+                        var textarea = document.getElementById("loglain");
+                        if (textarea) textarea.scrollTop = textarea.scrollHeight;
+                    }
                 }
             });
-        $(document).ready(function() {
-                $.ajaxSetup({ cache: false });
-                        });
-                var textarea = document.getElementById("loglain");
-                textarea.scrollTop = textarea.scrollHeight;
         }, 1000);
+        syncRawToForm();
     });
 if ( window.history.replaceState ) {
   window.history.replaceState( null, null, window.location.href );
 }
 </script>
-<body class="box_script" style="text-align:center">
+</head>
+
+<body>
+<div class="box_script" style="text-align:center">
 	<center>
 <?php
 $filename = 'login.php';
 if (file_exists($filename)) {
-    echo '<a href="login.php" onClick="logout()">';
+    echo '<a href="login.php">';
 } else {
-    echo '<a href="index.php" onClick="logout()">';
+    echo '<a href="index.php">';
 }
 ?>
-		<img src="img/image.png" width: 90%></a>
+		<img src="img/image.png" style="max-width: 90%; height: auto;"></a>
 	</center>
+
+    <!-- Real-time Status Header -->
+    <div class="status-bar">
+      <span id="status_badge" class="badge badge-disconnected">● Disconnected</span>
+      <span class="badge badge-info">Profile: <?php echo htmlspecialchars($active_prof); ?> (<?php echo htmlspecialchars($active_mode); ?>)</span>
+    </div>
+
     <form method="post">
-		<center>
-			<table align="center"><tr><td class="col-butt">
-				
-				<input type="submit" name="button1" class="btn geser"  id="strp"
-					value="<?php echo exec('cat log/st') ?>"/>
-	
-				<input type="submit" name="button3" class="btn geser" id="logg"
-					value="Log"/>
-				
-				<input type="submit" name="button2" class="btn geser" id="config"
-					value="Config"/>
-				
-				<input type="submit" name="button5" class="btn geser" id="about"
-					value="About"/>
+		<div class="nav-bar">
+			<?php $status_btn = trim(exec('cat log/st 2>/dev/null')); ?>
+			<input type="submit" name="button1" class="btn <?php echo ($status_btn === 'Stop' ? 'btn-stop' : 'btn-start'); ?>" id="strp"
+				value="<?php echo ($status_btn ? $status_btn : 'Start'); ?>"/>
 
-				</td></tr>
-			</table>
-		</center>
-<table align="center"><tr><td class="script_txt"><div class="inline-block"><pre>
+			<input type="submit" name="button3" class="btn" id="logg" value="Log"/>
+			<input type="submit" name="button2" class="btn" id="config" value="Config"/>
+			<input type="submit" name="button5" class="btn" id="about" value="About"/>
+		</div>
+
 <?php
-  exec('cat /var/update.xderm',$z);
-    if ($z[0]) {
- if ( $z[0] != '3.1' ){
-echo '<pre><h3 style="color:lime">New versi GUI Detected, Please Update!!</h3></pre>';
-};
-    };
-  if (isset($_POST['button1'])) {
-  exec('cat log/st',$o);
-if ( $o[0] == 'Start' ) {
- exec('killall -q xderm-mini');
- exec('echo > screenlog.0');
- exec('chmod +x xderm-mini');
- exec('screen -L -dmS gua ./xderm-mini start');
- exec('echo Stop > log/st');
- echo "<div id='log' class='scroll'></div></pre>";
-echo '<script>
-  document.getElementById("strp").value="Stop";
-</script>';
- } else {
- exec('killall -q xderm-mini');
- exec('echo > screenlog.0');
- exec('chmod +x xderm-mini');
- exec('screen -L -dmS gu ./xderm-mini stop');
- exec('echo Start > log/st');
- echo "<div id='log' class='scroll'></div></pre>";
-echo '<script>
-  document.getElementById("strp").value="Start";
-</script>';
-}
+  exec('cat /var/update.xderm 2>/dev/null',$z);
+  if (!empty($z[0]) && $z[0] != '3.1') {
+    echo '<div style="color:#34d399; font-size:12px; margin-bottom:8px;">New version GUI Detected, Please Update!</div>';
   }
+
+  if (isset($_POST['button1'])) {
+    exec('cat log/st 2>/dev/null',$o);
+    if (!empty($o[0]) && $o[0] == 'Start') {
+      exec('killall -q xderm-mini');
+      exec('echo > screenlog.0');
+      exec('chmod +x xderm-mini');
+      exec('screen -L -dmS gua ./xderm-mini start');
+      exec('echo Stop > log/st');
+      echo "<div class='log-controls'><button type='button' id='btn_clear_log' class='btn-log-action' onclick='clearLog()'>Clear</button><button type='button' class='btn-log-action' onclick='copyLog()'>Copy</button></div>";
+      echo "<div id='log' class='terminal-box'></div>";
+      echo '<script>document.getElementById("strp").value="Stop"; document.getElementById("strp").className="btn btn-stop";</script>';
+    } else {
+      exec('killall -q xderm-mini');
+      exec('echo > screenlog.0');
+      exec('chmod +x xderm-mini');
+      exec('screen -L -dmS gu ./xderm-mini stop');
+      exec('echo Start > log/st');
+      echo "<div class='log-controls'><button type='button' id='btn_clear_log' class='btn-log-action' onclick='clearLog()'>Clear</button><button type='button' class='btn-log-action' onclick='copyLog()'>Copy</button></div>";
+      echo "<div id='log' class='terminal-box'></div>";
+      echo '<script>document.getElementById("strp").value="Start"; document.getElementById("strp").className="btn btn-start";</script>';
+    }
+  }
+
   if (isset($_POST['button4'])) {
-  exec('killall -q xderm-mini');
-  exec('chmod +x xderm-mini');
-  exec('screen -L -dmS upd ./xderm-mini update');
-  echo "<div id='loglain' class='scroll'></div></pre>";
-}
+    exec('killall -q xderm-mini');
+    exec('chmod +x xderm-mini');
+    exec('screen -L -dmS upd ./xderm-mini update');
+    echo "<div id='loglain' class='terminal-box'></div>";
+  }
 
-?>
-<?php
- if (isset($_POST['simpan'])) {
- $config=$_POST['configbox'];
- $conf=$_POST['profile'];
- $use_stunnel=$_POST['use_stunnel'];
- $use_gotun=$_POST['use_gotun'];
- $use_restfw=$_POST['use_restfw'];
- $use_waitmodem=$_POST['use_waitmodem'];
- $mode=$_POST['mode'];
- if ($use_stunnel <> 'yes' ){$use_stunnel='no';}
- if ($use_gotun <> 'yes' ){$use_gotun='no';}
- if ($use_restfw <> 'yes' ){$use_restfw='no';}
- if ($use_waitmodem <> 'yes' ){$use_waitmodem='no';}
- $config = str_replace( "\r", "", $config);
- exec('echo "'.$mode.'" > config/mode.default');
- exec('echo "'.$config.'" > config/'.$conf);
- exec('sed \'/host=\|port=\|pudp=\|user=\|pass=\|sni=\|mode=\|trojan\|\n/d\' config/\''.$conf.'\' > /var/vmess1.txt');
- exec('awk \'{ printf "%s", $0 }\' /var/vmess1.txt > /var/vmess2.txt');
- exec('sed \'/host=\|port=\|pudp=\|user=\|pass=\|sni=\|mode=\|vmess\|\n/d\' config/\''.$conf.'\' > /var/trojan1.txt');
- exec('awk \'{ printf "%s", $0 }\' /var/trojan1.txt > /var/trojan2.txt');
- exec('echo "'.$config.'" > config.txt');
- exec('sed -i \'s/\r$//g\' config.txt');
- exec('sed -i \'s/\r$//g\' config/'.$conf);
- exec('sed -i \':a;N;$!ba;s/\n\n//g\' config/'.$conf);
- exec('sed -i \':a;N;$!ba;s/\n\n//g\' config.txt');
- exec('sed -i \'/^#/!s/mode=.*//\' config/'.$conf);
- exec('sed -i \'/^#/!s/mode=.*//\' config.txt');
- exec('echo "'.$use_stunnel.'" > config/stun');
- exec('echo "'.$use_gotun.'" > config/gotun');
- exec('echo "'.$use_restfw.'" > config/firewall');
- exec('echo "'.$use_waitmodem.'" > config/modem');
- exec('echo "'.$conf.'" > config/default');
- exec('echo "Config telah di update." > loglain.txt');
- exec('echo "\''.$conf.'\' Menjadi default Config. !" >> loglain.txt');
- $use_boot=$_POST['use_boot'];
-echo "<div id='loglain' class='scroll'></div></pre>";
-if ($use_boot <> 'yes' ){ exec('./xderm-mini disable');
-} else { exec('./xderm-mini enable'); }
- exec("cat config/default",$default);
- }
+  if (isset($_POST['simpan'])) {
+    $config = $_POST['configbox'];
+    $conf = $_POST['profile'];
+    $use_stunnel = isset($_POST['use_stunnel']) ? $_POST['use_stunnel'] : 'no';
+    $use_gotun = isset($_POST['use_gotun']) ? $_POST['use_gotun'] : 'no';
+    $use_restfw = isset($_POST['use_restfw']) ? $_POST['use_restfw'] : 'no';
+    $use_waitmodem = isset($_POST['use_waitmodem']) ? $_POST['use_waitmodem'] : 'no';
+    $mode = $_POST['mode'];
 
-if($_POST['button5']){
-echo "<h3><center><b>Xderm Mini Informations</b></center></h3>";
-echo "<center><p align='center'><textarea name='aboutbox' id='aboutbox' rows='9' cols='50' style='
-			border-radius: 0px;
-			padding: 10px 10px;
-			background-color: white; 
-			font-align: center; ! important;' wrap='hard'>
-Xderm Mini is simple injector tool based on shell script and python commands for OpenWrt by @ryanfauzi1 which help you to inject your OpenWrt connection using VPN injection (SSH/Trojan/Vmess).
+    $config = str_replace("\r", "", $config);
+    exec('echo "'.$mode.'" > config/mode.default');
+    exec('echo "'.$config.'" > config/'.$conf);
+    exec('sed \'/host=\|port=\|pudp=\|user=\|pass=\|sni=\|payload=\|mode=\|trojan\|\n/d\' config/\''.$conf.'\' > /var/vmess1.txt');
+    exec('awk \'{ printf "%s", $0 }\' /var/vmess1.txt > /var/vmess2.txt');
+    exec('sed \'/host=\|port=\|pudp=\|user=\|pass=\|sni=\|payload=\|mode=\|vmess\|\n/d\' config/\''.$conf.'\' > /var/trojan1.txt');
+    exec('awk \'{ printf "%s", $0 }\' /var/trojan1.txt > /var/trojan2.txt');
+    exec('echo "'.$config.'" > config.txt');
+    exec('sed -i \'s/\r$//g\' config.txt');
+    exec('sed -i \'s/\r$//g\' config/'.$conf);
+    exec('sed -i \':a;N;$!ba;s/\n\n//g\' config/'.$conf);
+    exec('sed -i \':a;N;$!ba;s/\n\n//g\' config.txt');
+    exec('sed -i \'/^#/!s/mode=.*//\' config/'.$conf);
+    exec('sed -i \'/^#/!s/mode=.*//\' config.txt');
+    exec('echo "'.$use_stunnel.'" > config/stun');
+    exec('echo "'.$use_gotun.'" > config/gotun');
+    exec('echo "'.$use_restfw.'" > config/firewall');
+    exec('echo "'.$use_waitmodem.'" > config/modem');
+    exec('echo "'.$conf.'" > config/default');
+    exec('echo "Config telah di update." > loglain.txt');
+    exec('echo "\''.$conf.'\' Menjadi default Config. !" >> loglain.txt');
+    
+    $use_boot = isset($_POST['use_boot']) ? $_POST['use_boot'] : 'no';
+    if ($use_boot <> 'yes' ){ exec('./xderm-mini disable'); }
+    else { exec('./xderm-mini enable'); }
+    echo "<div class='log-controls'><button type='button' id='btn_clear_log' class='btn-log-action' onclick='clearLog()'>Clear</button></div>";
+    echo "<div id='loglain' class='terminal-box'></div>";
+  }
+
+  if (isset($_POST['button5'])) {
+    echo "<div style='font-size:14px; font-weight:bold; margin-bottom:8px;'>Xderm Mini Informations</div>";
+    echo "<textarea name='aboutbox' id='aboutbox' rows='12' class='input-field' style='font-family:monospace; font-size:11px;' wrap='hard' readonly>
+Xderm Mini is simple injector tool based on shell script and python commands for OpenWrt by @ryanfauzi1.
 
 =============================================
-           xdrtool Command Lists           
+           Supported Modes
 =============================================
-Change Username & Password  = 1 / a / A
-Change Username Only        = 2 / u / U
-Change Password Only        = 3 / p / P
-Install Login Page          = 4 / lp / LP
-Remove Login Page           = 5 / rlp/ RLP
-Manual Update               = 6 / mu / MU
-Fix index.php downloading   = 7 / fp / FP
-Install Default Theme       = 8 / dt / DT
-=============================================
+1. SSH-WS  : SSH WebSocket CDN (CloudFront/Cloudflare)
+2. SSH     : SSH SSL Direct (Stunnel / Python)
+3. Vmess   : V2Ray VMess Protocol
+4. Trojan  : Trojan VPN
+5. Multi   : Auto-Switching Multi Inject
 
 =============================================
-          Informasi Configuration          
+          Default config.txt (SSH-WS)
 =============================================
-Jika <stunnel> dicentang, maka
-tunneling ssh di-inject oleh stunnel client
-Jika tidak, akan digantikan python-https
-
-Jika <go-tun2socks> dicentang, maka
-semua lalu lintas diatur oleh go-tun2socks
-Jika tidak, akan digantikan badvpn-tun2socks
-
-Khusus mode SSH tidak support UDP jika
-Menggunakan go-tun2socks.
-
-khusus pengguna selain FW 18,
-silahkan centang <Restart Firewall>
-Guna mencegah terjadinya notif error.
-=============================================
-
-=============================================
-             Default config.txt             
-=============================================
-host=103.157.1xx.xx
+host=dz1wsoabehhmc.cloudfront.net
 port=443
 pudp=7300
-user=ryanxxxx
-pass=123xxx
-sni=www.xxx.xx
-vmess://eyJhZGQiOixxxxxxx
-trojan://user@server:port
+user=danaelssh-afipah
+pass=afipah
+sni=dz1wsoabehhmc.cloudfront.net
+payload=GET / HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf][crlf]
+mode=SSH-WS.
 =============================================
-</textarea></p></center>";
-echo '<p style="text-align:center; font-size:85%;">Read more info at <a href="https://github.com/ryanfauzi1/xderm-mini_GUI" target="_blank">Xderm Mini Github Repo</a></p></table>';
-echo '<center>
-                                <input type="submit" name="button6" class="btn geser" id="rmlogin"
-                                        value="Remove / Install Login Page"/>
-
-                                <input type="submit" name="button7" class="btn geser"  id="reinstall"
-                                        value="Force Reinstall Xderm Mini"/>
-										
-                                <input type="submit" name="button4" class="btn geser"  id="update"
-                                        value="Current Version 3.1 • Check Update"/>
-</center>';
-
-echo '<div class="footer slide" style="display: flex; height: 110%; flex-shrink: 0; font-weight: bold; font-size: 80%; font-align: center; ! important; padding-bottom: 10px"><p style="text-align:center">
-        Logo & Mods by <a href="https://me.helmiau.my.id" target="_blank">Helmi Amirudin</a> • Theme by <a href="https://www.facebook.com/agussriawan.id" target="_blank">Agus Sriawan</a><br>
-                Main Developer <a href="https://github.com/ryanfauzi1" target="_blank">Ryan Fauzi</a> • Copyright &copy 2021
-    </div>';
-}
-if($_POST['button2']){
-exec("cat config/mode.list|awk 'NR==1'",$adamode);
-$adamode=$adamode[0];
-if (!$adamode) {
-exec("echo SSH. >> config/mode.list");
-exec("echo Vmess. >> config/mode.list");
-exec("echo Trojan. >> config/mode.list");
-exec("echo Multi. >> config/mode.list"); }
-
-exec("cat config/config.list|awk 'NR==1'",$ada);
-$ada=$ada[0];
-if ($ada) {
-exec("cat config/default",$default);
-$default=$default[0];
- if ($default) {
-echo "<h3><center><b>Current active profile is [ $default ]</b></center></h3>";
-$data = file_get_contents("config/$default");
-echo "<textarea name='configbox' id='isi' placeholder='Masukkan config disini' rows='8' cols='50' wrap='hard'>$data</textarea>";
- } else {
-$data = file_get_contents("config.txt");
-echo "<textarea name='configbox' id='isi' placeholder='Masukkan config disini' rows='8' cols='50' wrap='hard'>$data</textarea>";
- }
-$data1 = file_get_contents("config/config1");
-echo "<textarea name='configbox1' id='isi1' rows='3' cols='8' style='display:none;' wrap='hard'>$data1</textarea>";
-$data2 = file_get_contents("config/config2");
-echo "<textarea name='configbox2' id='isi2' rows='3' cols='8' style='display:none;' wrap='hard'>$data2</textarea>";
-$data3 = file_get_contents("config/config3");
-echo "<textarea name='configbox3' id='isi3' rows='3' cols='8' style='display:none;' wrap='hard'>$data3</textarea>";
-$data4 = file_get_contents("config/config4");
-echo "<textarea name='configbox4' id='isi4' rows='3' cols='8' style='display:none;' wrap='hard'>$data4</textarea>";
-$data5 = file_get_contents("config/config5");
-echo "<textarea name='configbox5' id='isi5' rows='3' cols='8' style='display:none;' wrap='hard'>$data5</textarea>";
-} else {
-exec("mkdir -p config;touch config/config.list config/config1 config/config2");
-exec("touch config/config3 config/config4 config/config5 config/mode.list");
-exec("echo config1 >> config/config.list");
-exec("echo config2 >> config/config.list");
-exec("echo config3 >> config/config.list");
-exec("echo config4 >> config/config.list");
-exec("echo config5 >> config/config.list");
-exec("echo config1 >> config/default");
-$data = file_get_contents("config.txt");
-echo "<textarea name='configbox' id='isi' rows='9' cols='50' wrap='hard'>$data</textarea>";
-$config=$_POST['configbox'];
-$conf=$_POST['profile'];
-exec('echo "'.$config.'" > config/'.$conf);
-exec('sed -i \'s/\r$//g\' config/'.$conf);
-exec('sed -i \':a;N;$!ba;s/\n\n//g\' config/'.$conf);
-};
-echo '<div class="form-box">';
-echo '<select name="profile" id="idconf" onchange="shipping_calc()">';
-exec("cat config/config.list",$list);
-exec("cat config/default",$default);
-$default=$default[0];
-$x=0;
-while($x<count($list)){
-if ( $default == $list[$x] ){
-echo "<option value=\"$list[$x]\" selected>$list[$x]</option>";
-} else {
-echo "<option value=\"$list[$x]\">$list[$x]</option>";}
-  $x++;}
-echo '<form method="post"'>
-exec("cat config/stun|awk 'NR==1'",$stun);
-  if (!$stun[0]) { exec("echo yes > config/stun"); }
- if ( $stun[0] == "yes"){
-echo '<input type="checkbox" name="use_stunnel" value="yes" checked>stunnel'; }
-else {
-echo '<input type="checkbox" name="use_stunnel" value="yes">stunnel'; }
-exec("touch /etc/rc.local");
-exec("cat /etc/rc.local 2>/dev/null|grep xderm|grep button|awk '{print $2}'|awk 'NR==1'",$boot);
-
-exec("cat config/gotun|awk 'NR==1'",$gotun);
-  if (!$gotun[0]) { exec("echo no > config/gotun"); }
- if ( $gotun[0] == "yes"){
-echo '<input type="checkbox" name="use_gotun" value="yes" checked>go-tun2socks'; }
-else {
-echo '<input type="checkbox" name="use_gotun" value="yes">go-tun2socks'; }
-
-exec("cat config/firewall|awk 'NR==1'",$restfw);
-  if (!$restfw[0]) { exec("echo no > config/firewall"); }
- if ( $restfw[0] == "yes"){
-echo '<input type="checkbox" name="use_restfw" value="yes" checked>Restart Firewall<br>'; }
-else {
-echo '<input type="checkbox" name="use_restfw" value="yes">Restart Firewall<br>'; }
-
-echo '<select name="mode" id="idmode">';
-exec("cat config/mode.list",$modelist);
-exec("cat config/mode.default",$modedefault);
-$modedefault=$modedefault[0];
-$u=0;
-while($u<count($modelist)){
-if ( $modedefault == $modelist[$u] ){
-echo "<option value=\"$modelist[$u]\" selected>$modelist[$u]</option>";
-} else {
-echo "<option value=\"$modelist[$u]\">$modelist[$u]</option>";}
-  $u++;}
-
-exec("cat config/modem|awk 'NR==1'",$modem);
-  if (!$modem[0]) { exec("echo no > config/modem"); }
- if ( $modem[0] == "yes"){
-echo '<input type="checkbox" name="use_waitmodem" value="yes" checked>Waiting Modem '; }
-else {
-echo '<input type="checkbox" name="use_waitmodem" value="yes">Waiting Modem '; }
-
- if ($boot[0]) {
-echo '<input type="checkbox" name="use_boot" value="yes" checked>ON-Boot'; }
-else {
-echo '<input type="checkbox" name="use_boot" value="yes">ON-Boot'; }
-echo '<input type="submit" name="simpan" class="btn geser" width: 98%; height: 30px; margin-right: 20px; flex-shrink: 0; font-weight: bold; ! important;" value="Simpan"/></form></div>';
-echo '<div id="logx" class="scr"></div></pre>';
-} else {
-if(!$_POST['button5']){
- if (!isset($_POST['simpan'])) {
-  if(!$_POST['button6']){
-   if(!$_POST['button7']){
-    if(!$_POST['button4']){
-echo '<div id="log" class="scroll"></div></pre>';
-    }
-   }
+</textarea>";
+    echo '<div style="margin-top:10px; display:flex; gap:6px; justify-content:center; flex-wrap:wrap;">
+            <input type="submit" name="button6" class="btn" id="rmlogin" value="Remove / Install Login Page"/>
+            <input type="submit" name="button7" class="btn" id="reinstall" value="Force Reinstall"/>
+            <input type="submit" name="button4" class="btn" id="update" value="Check Update"/>
+          </div>';
   }
- }
-}
-}
-if($_POST['button6']){
-if (file_exists("login.php") | file_exists("header.php")) {
- echo 'Loginpage Tersedia, Menghapus...<br/>';
- rename("login.php", "login.php.xdrtool");
- rename("header.php", "header.php.xdrtool");
- echo 'Loginpage Terhapus !';
-} elseif (file_exists("login.php.xdrtool") | file_exists("header.php.xdrtool")) {
- echo 'Loginpage tidak Tersedia, Menginstall...<br/>';
- rename("login.php.xdrtool", "login.php");
- rename("header.php.xdrtool", "header.php");
- echo 'Loginpage Terinstall !';
-} else {
- echo 'Login page is available, now installing online mode !';
- exec('wget -O /www/xderm/login.php https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main/login.php -q');
- exec('wget -O /www/xderm/header.php https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main/header.php -q');
- echo 'Login page installed ! Refresh this page'; }
-}
-if($_POST['button7']){
-echo 'Force Reinstall Xderm Mini !<br/>';
-echo 'Removing old files<br/>';
-if (file_exists("login.php") | file_exists("header.php")) {
-	exec('wget -O /www/xderm/login.php https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main/login.php -q');
-	exec('wget -O /www/xderm/header.php https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main/header.php -q');
-} elseif (file_exists("login.php.xdrtool") | file_exists("header.php.xdrtool")) {
-	exec('wget -O /www/xderm/login.php.xdrtool https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main/login.php -q');
-	exec('wget -O /www/xderm/header.php.xdrtool https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main/header.php -q');
-} else {
-	exec('wget -O /www/xderm/login.php https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main/login.php -q');
-	exec('wget -O /www/xderm/header.php https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main/header.php -q');
-}
-exec('wget -O /www/xderm/index.html https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main/index.html -q');
-exec('wget -O /www/xderm/xderm-mini https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main/xderm-mini -q');
-exec('wget -O /www/xderm/js/jquery-2.1.3.min.js https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main/jquery-2.1.3.min.js -q');
-exec('wget -O /www/xderm/img/image.png https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main/image.png -q');
-exec('wget -O /www/xderm/img/fav.ico https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main/fav.ico -q');
-exec('wget -O /www/xderm/img/ico.png https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main/ico.png -q');
-exec('wget -O /www/xderm/img/background.jpg https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main/background.jpg -q');
-exec('wget -O /bin/xdrauth https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main/adds/xdrauth -q');
-exec('chmod +x /bin/xdrauth');
-exec('wget -O /bin/xdrtool https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main/adds/xdrtool -q');
-exec('wget -O /www/xderm/index.php https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main/index.php -q');
-exec('chmod +x /bin/xdrtool');
-echo 'Installing new files<br/>';
-echo 'Installation done ! Refresh this page<br/>';
-}
+
+  if (isset($_POST['button2'])) {
+    exec("cat config/mode.list|awk 'NR==1'", $adamode);
+    if (empty($adamode[0])) {
+      exec("echo SSH. >> config/mode.list");
+      exec("echo SSH-WS. >> config/mode.list");
+      exec("echo Vmess. >> config/mode.list");
+      exec("echo Trojan. >> config/mode.list");
+      exec("echo Multi. >> config/mode.list");
+    }
+
+    exec("cat config/config.list|awk 'NR==1'", $ada);
+    if (!empty($ada[0])) {
+      exec("cat config/default", $default);
+      $cur_def = !empty($default[0]) ? trim($default[0]) : "config1";
+      $data = file_exists("config/$cur_def") ? file_get_contents("config/$cur_def") : file_get_contents("config.txt");
+    } else {
+      exec("mkdir -p config; touch config/config.list config/config1 config/config2 config/config3 config/config4 config/config5 config/mode.list");
+      exec("echo config1 >> config/config.list");
+      exec("echo config2 >> config/config.list");
+      exec("echo config3 >> config/config.list");
+      exec("echo config4 >> config/config.list");
+      exec("echo config5 >> config/config.list");
+      exec("echo config1 >> config/default");
+      $cur_def = "config1";
+      $data = file_get_contents("config.txt");
+    }
+
+    $data1 = file_exists("config/config1") ? file_get_contents("config/config1") : "";
+    $data2 = file_exists("config/config2") ? file_get_contents("config/config2") : "";
+    $data3 = file_exists("config/config3") ? file_get_contents("config/config3") : "";
+    $data4 = file_exists("config/config4") ? file_get_contents("config/config4") : "";
+    $data5 = file_exists("config/config5") ? file_get_contents("config/config5") : "";
+
+    echo "<div style='font-size:13px; font-weight:600; margin-bottom:8px;'>Active Profile: [ <span style='color:#10b981;'>$cur_def</span> ]</div>";
+
+    // Dual-Mode Tabs: Form Mode vs Raw Mode
+    echo '<div class="config-tabs">
+            <button type="button" class="tab-btn active" id="tab_form" onclick="switchConfigTab(\'form\')">Form Editor (Mudah)</button>
+            <button type="button" class="tab-btn" id="tab_raw" onclick="switchConfigTab(\'raw\')">Raw Text (Manual)</button>
+          </div>';
+
+    // 1. Easy Form Editor
+    echo '<div id="form_editor" class="form-grid">
+            <div class="form-group">
+              <label>Host / CDN Domain:</label>
+              <input type="text" id="f_host" class="input-field" placeholder="dz1wsoabehhmc.cloudfront.net" oninput="syncFormToRaw()">
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Port:</label>
+                <input type="text" id="f_port" class="input-field" placeholder="443" oninput="syncFormToRaw()">
+              </div>
+              <div class="form-group">
+                <label>SNI Bug:</label>
+                <input type="text" id="f_sni" class="input-field" placeholder="dz1wsoabehhmc.cloudfront.net" oninput="syncFormToRaw()">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Username:</label>
+                <input type="text" id="f_user" class="input-field" placeholder="username" oninput="syncFormToRaw()">
+              </div>
+              <div class="form-group">
+                <label>Password:</label>
+                <div class="pass-wrapper">
+                  <input type="password" id="f_pass" class="input-field" placeholder="password" oninput="syncFormToRaw()">
+                  <button type="button" class="btn-toggle-pass" onclick="togglePassVisibility()">👁️</button>
+                </div>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>UDPgw Port:</label>
+              <input type="text" id="f_pudp" class="input-field" placeholder="7300" oninput="syncFormToRaw()">
+            </div>
+            <div class="form-group">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <label>Payload (WebSocket / HTTP):</label>
+                <button type="button" id="btn_preset_cf" class="btn-preset" onclick="presetCloudFront()">+ CloudFront WS Preset</button>
+              </div>
+              <textarea id="f_payload" class="input-field" rows="3" placeholder="GET / HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf][crlf]" oninput="syncFormToRaw()"></textarea>
+            </div>
+          </div>';
+
+    // 2. Raw Text Editor
+    echo '<div id="raw_editor" style="display:none;">
+            <textarea name="configbox" id="isi" class="input-field" rows="9" wrap="hard" oninput="syncRawToForm()">' . htmlspecialchars($data) . '</textarea>
+          </div>';
+
+    // Hidden textareas for profile switching
+    echo "<textarea id='isi1' style='display:none;'>" . htmlspecialchars($data1) . "</textarea>";
+    echo "<textarea id='isi2' style='display:none;'>" . htmlspecialchars($data2) . "</textarea>";
+    echo "<textarea id='isi3' style='display:none;'>" . htmlspecialchars($data3) . "</textarea>";
+    echo "<textarea id='isi4' style='display:none;'>" . htmlspecialchars($data4) . "</textarea>";
+    echo "<textarea id='isi5' style='display:none;'>" . htmlspecialchars($data5) . "</textarea>";
+
+    // Options and Profile Selector
+    echo '<div style="margin-top:12px; background:#111827; border:1px solid #374151; border-radius:6px; padding:10px;">';
+    echo '<div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
+            <label style="font-size:12px; font-weight:600; color:#9ca3af;">Profile:</label>
+            <select name="profile" id="idconf" class="input-field" style="width:auto; flex:1;" onchange="shipping_calc()">';
+    exec("cat config/config.list", $list);
+    exec("cat config/default", $default);
+    $default = !empty($default[0]) ? trim($default[0]) : "config1";
+    for ($x = 0; $x < count($list); $x++) {
+      $item = trim($list[$x]);
+      if ($default === $item) { echo "<option value=\"$item\" selected>$item</option>"; }
+      else { echo "<option value=\"$item\">$item</option>"; }
+    }
+    echo '</select>';
+
+    echo '<label style="font-size:12px; font-weight:600; color:#9ca3af; margin-left:6px;">Mode:</label>
+          <select name="mode" id="idmode" class="input-field" style="width:auto; flex:1;">';
+    exec("cat config/mode.list", $modelist);
+    exec("cat config/mode.default", $modedefault);
+    $modedefault = !empty($modedefault[0]) ? trim($modedefault[0]) : "SSH-WS.";
+    for ($u = 0; $u < count($modelist); $u++) {
+      $mitem = trim($modelist[$u]);
+      if ($modedefault === $mitem) { echo "<option value=\"$mitem\" selected>$mitem</option>"; }
+      else { echo "<option value=\"$mitem\">$mitem</option>"; }
+    }
+    echo '</select></div>';
+
+    // Checkbox Options
+    exec("cat config/stun 2>/dev/null", $stun);
+    $is_stun = (!empty($stun[0]) && trim($stun[0]) === "yes");
+    exec("cat config/gotun 2>/dev/null", $gotun);
+    $is_gotun = (!empty($gotun[0]) && trim($gotun[0]) === "yes");
+    exec("cat config/firewall 2>/dev/null", $restfw);
+    $is_restfw = (!empty($restfw[0]) && trim($restfw[0]) === "yes");
+    exec("cat config/modem 2>/dev/null", $modem);
+    $is_modem = (!empty($modem[0]) && trim($modem[0]) === "yes");
+    exec("cat /etc/rc.local 2>/dev/null|grep xderm|grep button|awk '{print $2}'|awk 'NR==1'", $boot);
+    $is_boot = !empty($boot[0]);
+
+    echo '<div class="options-grid">
+            <label><input type="checkbox" name="use_stunnel" value="yes" ' . ($is_stun ? 'checked' : '') . '> stunnel</label>
+            <label><input type="checkbox" name="use_gotun" value="yes" ' . ($is_gotun ? 'checked' : '') . '> go-tun2socks</label>
+            <label><input type="checkbox" name="use_restfw" value="yes" ' . ($is_restfw ? 'checked' : '') . '> Restart Firewall</label>
+            <label><input type="checkbox" name="use_waitmodem" value="yes" ' . ($is_modem ? 'checked' : '') . '> Waiting Modem</label>
+            <label><input type="checkbox" name="use_boot" value="yes" ' . ($is_boot ? 'checked' : '') . '> Auto ON-Boot</label>
+          </div>';
+
+    echo '<input type="submit" name="simpan" class="btn" style="width:100%; background:#059669; color:#fff; padding:10px; font-size:14px; margin-top:8px;" value="Simpan Konfigurasi"/>';
+    echo '</div>';
+    echo '<script>syncRawToForm();</script>';
+  } else {
+    if (!isset($_POST['button5']) && !isset($_POST['simpan']) && !isset($_POST['button6']) && !isset($_POST['button7']) && !isset($_POST['button4']) && !isset($_POST['button1'])) {
+      echo "<div class='log-controls'><button type='button' id='btn_clear_log' class='btn-log-action' onclick='clearLog()'>Clear</button><button type='button' class='btn-log-action' onclick='copyLog()'>Copy</button></div>";
+      echo "<div id='log' class='terminal-box'></div>";
+    }
+  }
+
+  if (isset($_POST['button6'])) {
+    if (file_exists("login.php") || file_exists("header.php")) {
+      rename("login.php", "login.php.xdrtool");
+      rename("header.php", "header.php.xdrtool");
+      echo '<div style="color:#10b981; margin:10px 0;">Login page terhapus!</div>';
+    } elseif (file_exists("login.php.xdrtool") || file_exists("header.php.xdrtool")) {
+      rename("login.php.xdrtool", "login.php");
+      rename("header.php.xdrtool", "header.php");
+      echo '<div style="color:#10b981; margin:10px 0;">Login page terinstall!</div>';
+    }
+  }
+
+  if (isset($_POST['button7'])) {
+    echo '<div style="color:#fbbf24; margin:10px 0;">Reinstalling files...</div>';
+    exec('wget -O /www/xderm/index.html https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main/index.html -q');
+    exec('wget -O /www/xderm/xderm-mini https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main/xderm-mini -q');
+    exec('wget -O /www/xderm/xderm_ws.py https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main/xderm_ws.py -q');
+    exec('chmod +x /www/xderm/xderm-mini /www/xderm/xderm_ws.py');
+    exec('wget -O /www/xderm/js/jquery-2.1.3.min.js https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main/jquery-2.1.3.min.js -q');
+    exec('wget -O /www/xderm/index.php https://raw.githubusercontent.com/ryanfauzi1/xderm-mini_GUI/main/index.php -q');
+    echo '<div style="color:#10b981; margin:10px 0;">Reinstall selesai! Silahkan refresh halaman.</div>';
+  }
 ?>
-</head>
+    </form>
+
+    <div class="footer">
+      <span>Xderm Mini GUI • SSH WS CDN Supported</span><br>
+      <span>OpenWrt aarch64 • Dual-Stack Firewall (iptables + nftables)</span>
+    </div>
 </div>
+</body>
 </html>
