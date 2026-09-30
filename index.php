@@ -1,8 +1,17 @@
 <?php
+  chdir(__DIR__);
+  if (!is_dir('log')) {
+    @mkdir('log', 0755, true);
+  }
+  if (!file_exists('log/st')) {
+    @file_put_contents('log/st', "Start\n");
+  }
+
   if (file_exists('login.php')) {
     include 'header.php';
     ceklogin();
   }
+
 
 
   // Read active profile and mode for status header
@@ -644,12 +653,20 @@ if (file_exists($filename)) {
   }
 
   if (isset($_POST['button1'])) {
-    exec('cat log/st 2>/dev/null',$o);
-    if (!empty($o[0]) && $o[0] == 'Start') {
+    if (!is_dir('log')) {
+      @mkdir('log', 0755, true);
+    }
+    $req = isset($_POST['button1']) ? trim($_POST['button1']) : '';
+    $o = trim(exec('cat log/st 2>/dev/null'));
+    $action = ($req === 'Start' || $req === 'Stop') ? $req : ($o === 'Start' || empty($o) ? 'Start' : 'Stop');
+
+    $xderm_bin = file_exists('/www/xderm/xderm-mini') ? '/www/xderm/xderm-mini' : './xderm-mini';
+
+    if ($action === 'Start') {
       exec('killall -q xderm-mini');
       exec('echo > screenlog.0');
-      exec('chmod +x xderm-mini');
-      exec('screen -L -dmS gua ./xderm-mini start');
+      exec('chmod +x ' . $xderm_bin);
+      exec('screen -L -dmS gua ' . $xderm_bin . ' start');
       exec('echo Stop > log/st');
       render_log_controls();
       echo "<div id='log' class='terminal-box'></div>";
@@ -657,8 +674,8 @@ if (file_exists($filename)) {
     } else {
       exec('killall -q xderm-mini');
       exec('echo > screenlog.0');
-      exec('chmod +x xderm-mini');
-      exec('screen -L -dmS gu ./xderm-mini stop');
+      exec('chmod +x ' . $xderm_bin);
+      exec('screen -L -dmS gu ' . $xderm_bin . ' stop');
       exec('echo Start > log/st');
       render_log_controls();
       echo "<div id='log' class='terminal-box'></div>";
@@ -667,9 +684,10 @@ if (file_exists($filename)) {
   }
 
   if (isset($_POST['button4'])) {
+    $xderm_bin = file_exists('/www/xderm/xderm-mini') ? '/www/xderm/xderm-mini' : './xderm-mini';
     exec('killall -q xderm-mini');
-    exec('chmod +x xderm-mini');
-    exec('screen -L -dmS upd ./xderm-mini update');
+    exec('chmod +x ' . $xderm_bin);
+    exec('screen -L -dmS upd ' . $xderm_bin . ' update');
     echo "<div id='loglain' class='terminal-box'></div>";
   }
 

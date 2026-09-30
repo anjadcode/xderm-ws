@@ -96,6 +96,20 @@ class TestWebUI(unittest.TestCase):
         # index.php must use file_exists('login.php')
         self.assertIn("file_exists('login.php')", self.content)
 
+    def test_index_directory_and_button_robustness(self):
+        """Verify index.php enforces chdir, creates log directory, and handles start button."""
+        self.assertIn("chdir(__DIR__)", self.content)
+        self.assertIn("!is_dir('log')", self.content)
+        self.assertIn("mkdir('log'", self.content)
+
+        # Ensure log directory exists in repository
+        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        log_dir = os.path.join(repo_root, 'log')
+        self.assertTrue(os.path.isdir(log_dir))
+        self.assertTrue(os.path.exists(os.path.join(log_dir, 'st')))
+        self.assertTrue(os.path.exists(os.path.join(log_dir, '.gitkeep')))
+
 if __name__ == '__main__':
     unittest.main()
+
 
