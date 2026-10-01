@@ -159,6 +159,17 @@ class TestOpenWrtSimulation(unittest.TestCase):
         self.assertEqual(res.returncode, 0)
         self.assertIn("BadVPN tun2socks", res.stdout)
 
+    def test_busybox_sleep_compatibility(self):
+        """Verify xderm-mini only uses integer sleep values for standard BusyBox compatibility."""
+        import re
+        script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'xderm-mini'))
+        with open(script_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Find any sleep command with a float/decimal number (e.g. sleep 0.5)
+        decimal_sleeps = re.findall(r'sleep\s+[0-9]+\.[0-9]+', content)
+        self.assertEqual(decimal_sleeps, [], f"Found non-integer sleep: {decimal_sleeps}")
+
 if __name__ == '__main__':
     unittest.main()
 

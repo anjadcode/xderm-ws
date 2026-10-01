@@ -149,7 +149,7 @@ if [ -n "$WSSCRIPT" ]; then
   if command -v screen >/dev/null 2>&1; then
     HOME=/root TERM=xterm screen -dmS injekws python3 "$WSSCRIPT" --listen 127.0.0.1 --port 8789 --host "$host" --rport "$port" --sni "$sni" --payload "$payload" --log-file /www/xderm/log/ws.log
   fi
-  sleep 0.5
+  sleep 1
   if ! pgrep -f "xderm_ws.py" >/dev/null 2>&1; then
     nohup python3 "$WSSCRIPT" --listen 127.0.0.1 --port 8789 --host "$host" --rport "$port" --sni "$sni" --payload "$payload" --log-file /www/xderm/log/ws.log >/dev/null 2>&1 &
   fi
@@ -1525,8 +1525,11 @@ while [ $n -lt 15 ]; do
      flushx;echo -e "{$(date +%M:%S)} Berhenti." >> screenlog.0
      exit
  fi
-r=$(curl -m5 88.198.46.60 -w "%{http_code}" --proxy socks5://127.0.0.1:1080 -s -o /dev/null|head -c2)
-  if [ "$r" == "30" ] || [ "$r" == "20" ]; then
+r=$(curl -m5 88.198.46.60 -w "%{http_code}" --proxy socks5://127.0.0.1:1080 -s -o /dev/null 2>/dev/null|head -c2)
+if [ -z "$r" ] || [ "$r" == "00" ]; then
+  r=$(curl -m5 1.1.1.1 -w "%{http_code}" --proxy socks5://127.0.0.1:1080 -s -o /dev/null 2>/dev/null|head -c2)
+fi
+if [ "$r" == "30" ] || [ "$r" == "20" ]; then
   echo '<pre><h2 style="color:#006400" "text-overflow:ellipsis">HTTP/1.1 200 OK</h2></pre>' >> ../screenlog.0
   xxx="no";break
   fi
