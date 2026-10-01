@@ -260,27 +260,43 @@ print(' '.join(ips))
  }
 
  jalankan_tun2socks () {
-  local sport="$1"
-  local pudp="${2:-7300}"
+  local badvpn_path="badvpn-tun2socks"
+  if [ -x /www/xderm/badvpn-tun2socks ]; then
+    badvpn_path="/www/xderm/badvpn-tun2socks"
+  elif [ -x /usr/bin/badvpn-tun2socks ]; then
+    badvpn_path="/usr/bin/badvpn-tun2socks"
+  fi
+
+  local gopath="go-tun2socks"
+  if [ -x /www/xderm/go-tun2socks ]; then
+    gopath="/www/xderm/go-tun2socks"
+  elif [ -x /usr/bin/go-tun2socks ]; then
+    gopath="/usr/bin/go-tun2socks"
+  fi
+
   local use_go="no"
   local gtun=$(cat /www/xderm/config/gotun 2>/dev/null)
 
-  if [ "$gtun" == "yes" ] || ! command -v badvpn-tun2socks >/dev/null 2>&1; then
+  if [ "$gtun" == "yes" ]; then
+    use_go="yes"
+  elif ! command -v badvpn-tun2socks >/dev/null 2>&1 && [ ! -x /www/xderm/badvpn-tun2socks ]; then
     use_go="yes"
   fi
 
   if [ "$use_go" == "yes" ]; then
-    local gopath="go-tun2socks"
-    if [ -x /www/xderm/go-tun2socks ]; then
-      gopath="/www/xderm/go-tun2socks"
-    elif [ -x /usr/bin/go-tun2socks ]; then
-      gopath="/usr/bin/go-tun2socks"
-    fi
     echo -e "{$(date +%M:%S)} Menjalankan go-tun2socks...." >> screenlog.0
-    screen -dmS gerbang $gopath -loglevel none -proxyServer 127.0.0.1:$sport -proxyType socks -tunName tun0 -tunAddr 10.0.0.2 -tunGw 10.0.0.1 -tunMask 255.255.255.0
+    HOME=/root TERM=xterm screen -dmS gerbang $gopath -loglevel none -proxyServer 127.0.0.1:$sport -proxyType socks -tunName tun0 -tunAddr 10.0.0.2 -tunGw 10.0.0.1 -tunMask 255.255.255.0
+    sleep 1
+    if ! pgrep -f "$gopath.*tun0" >/dev/null 2>&1 && ! pgrep -f "tun2socks.*tun0" >/dev/null 2>&1; then
+      nohup $gopath -loglevel none -proxyServer 127.0.0.1:$sport -proxyType socks -tunName tun0 -tunAddr 10.0.0.2 -tunGw 10.0.0.1 -tunMask 255.255.255.0 > /www/xderm/log/tun2socks.log 2>&1 &
+    fi
   else
     echo -e "{$(date +%M:%S)} Menjalankan badvpn-tun2socks...." >> screenlog.0
-    screen -dmS gerbang badvpn-tun2socks --tundev tun0 --netif-ipaddr 10.0.0.2 --netif-netmask 255.255.255.0 --socks-server-addr 127.0.0.1:$sport --udpgw-remote-server-addr 127.0.0.1:$pudp --udpgw-transparent-dns --loglevel 0
+    HOME=/root TERM=xterm screen -dmS gerbang $badvpn_path --tundev tun0 --netif-ipaddr 10.0.0.2 --netif-netmask 255.255.255.0 --socks-server-addr 127.0.0.1:$sport --udpgw-remote-server-addr 127.0.0.1:$pudp --udpgw-transparent-dns --loglevel 0
+    sleep 1
+    if ! pgrep -f "$badvpn_path.*tun0" >/dev/null 2>&1 && ! pgrep -f "badvpn-tun2socks.*tun0" >/dev/null 2>&1; then
+      nohup $badvpn_path --tundev tun0 --netif-ipaddr 10.0.0.2 --netif-netmask 255.255.255.0 --socks-server-addr 127.0.0.1:$sport --udpgw-remote-server-addr 127.0.0.1:$pudp --udpgw-transparent-dns --loglevel 0 > /www/xderm/log/tun2socks.log 2>&1 &
+    fi
   fi
   sleep 2
 
@@ -304,6 +320,8 @@ kill $(ps w|grep python3|grep xderm.py|awk "NR==1"|awk '{print $1}') 2>/dev/null
 kill $(ps w|grep python3|grep xderm_ws.py|awk "NR==1"|awk '{print $1}') 2>/dev/null
 kill $(screen -ls 2>/dev/null|grep injekws|awk -F '.' '{print $1}'|awk '{print $1}') 2>/dev/null
 kill $(screen -ls 2>/dev/null|grep auto|awk -F '.' '{print $1}'|awk '{print $1}') 2>/dev/null
+kill $(screen -ls 2>/dev/null|grep gerbang|awk -F '.' '{print $1}'|awk '{print $1}') 2>/dev/null
+pkill -f "tun2socks.*tun0" 2>/dev/null
 kill $(ps w|grep badvpn|grep tun|awk "NR==1"|awk '{print $1}') 2>/dev/null
  mode=$(cat /www/xderm/config/mode.default|sed 's/\.//g')
   if [ "$mode" == "SSH" ] || [ "$mode" == "SSH-WS" ]; then
@@ -1459,11 +1477,11 @@ echo "##############################################" >> screenlog.0
 echo -e "{$(date +%M:%S)} Menjalankan SSH Client (latarbelakang)...." >> screenlog.0
 rm -rf /root/.ssh/known_hosts* /www/xderm/log/screenlog.0;cd /www/xderm/log 2>/dev/null
 if command -v screen >/dev/null 2>&1; then
-  HOME=/root TERM=xterm screen -L -Logfile screenlog.0 -dmS xderm sshpass -p "$pass" ssh -oTCPKeepAlive=yes -oServerAliveInterval=25 -oServerAliveCountMax=3 -oStrictHostKeyChecking=no -CND 127.0.0.1:1080 -p $port $user@$host -o "Proxycommand=corkscrew 127.0.0.1 8789 %h %p"
+  HOME=/root TERM=xterm screen -L -Logfile screenlog.0 -dmS xderm sshpass -p "$pass" ssh -oTCPKeepAlive=yes -oServerAliveInterval=25 -oServerAliveCountMax=3 -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -CND 127.0.0.1:1080 -p $port $user@$host -o "Proxycommand=corkscrew 127.0.0.1 8789 %h %p"
 fi
 sleep 1
 if ! pgrep -f "Proxycommand=corkscrew 127.0.0.1 8789" >/dev/null 2>&1; then
-  nohup sshpass -p "$pass" ssh -oTCPKeepAlive=yes -oServerAliveInterval=25 -oServerAliveCountMax=3 -oStrictHostKeyChecking=no -CND 127.0.0.1:1080 -p $port $user@$host -o "Proxycommand=corkscrew 127.0.0.1 8789 %h %p" > screenlog.0 2>&1 &
+  nohup sshpass -p "$pass" ssh -oTCPKeepAlive=yes -oServerAliveInterval=25 -oServerAliveCountMax=3 -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -CND 127.0.0.1:1080 -p $port $user@$host -o "Proxycommand=corkscrew 127.0.0.1 8789 %h %p" > screenlog.0 2>&1 &
 fi
 sleep 2;n=0;xxx="lanjut";echo -ne "{$(date +%M:%S)} Menguji Koneksi... " >> ../screenlog.0
 while [ $n -lt 15 ]; do
@@ -1531,11 +1549,11 @@ while true; do
       sleep 2
     fi
     if command -v screen >/dev/null 2>&1; then
-      HOME=/root TERM=xterm screen -L -Logfile /www/xderm/log/screenlog.0 -dmS xderm sshpass -p \"$pass\" ssh -oTCPKeepAlive=yes -oServerAliveInterval=25 -oServerAliveCountMax=3 -oStrictHostKeyChecking=no -CND 127.0.0.1:1080 -p $port $user@$host -o \"Proxycommand=corkscrew 127.0.0.1 8789 %h %p\" 2>/dev/null
+      HOME=/root TERM=xterm screen -L -Logfile /www/xderm/log/screenlog.0 -dmS xderm sshpass -p \"$pass\" ssh -oTCPKeepAlive=yes -oServerAliveInterval=25 -oServerAliveCountMax=3 -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -CND 127.0.0.1:1080 -p $port $user@$host -o \"Proxycommand=corkscrew 127.0.0.1 8789 %h %p\" 2>/dev/null
     fi
     sleep 1
     if ! pgrep -f \"Proxycommand=corkscrew 127.0.0.1 8789\" >/dev/null 2>&1; then
-      nohup sshpass -p \"$pass\" ssh -oTCPKeepAlive=yes -oServerAliveInterval=25 -oServerAliveCountMax=3 -oStrictHostKeyChecking=no -CND 127.0.0.1:1080 -p $port $user@$host -o \"Proxycommand=corkscrew 127.0.0.1 8789 %h %p\" >> /www/xderm/log/screenlog.0 2>&1 &
+      nohup sshpass -p \"$pass\" ssh -oTCPKeepAlive=yes -oServerAliveInterval=25 -oServerAliveCountMax=3 -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -CND 127.0.0.1:1080 -p $port $user@$host -o \"Proxycommand=corkscrew 127.0.0.1 8789 %h %p\" >> /www/xderm/log/screenlog.0 2>&1 &
     fi
     sleep 7
     ip route replace default via 10.0.0.2 dev tun0 metric 1 2>/dev/null || route add default gw 10.0.0.2 metric 1 2>/dev/null
