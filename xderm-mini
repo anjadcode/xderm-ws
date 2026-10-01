@@ -217,8 +217,8 @@ elif [ $mode == "Trojan" ]; then
     fi
    fi
   wan_line=$(ip route show default 2>/dev/null | grep -v 'tun' | head -n1)
-  ipg=$(echo "$wan_line" | awk '{print $3}')
-  ifaces=$(echo "$wan_line" | awk '{print $5}')
+  ifaces=$(echo "$wan_line" | awk '{for(i=1;i<=NF;i++) if($i=="dev") print $(i+1)}')
+  ipg=$(echo "$wan_line" | awk '{for(i=1;i<=NF;i++) if($i=="via") print $(i+1)}')
   if [ -z "$ifaces" ]; then
     ifaces=$(ip r 2>/dev/null | grep default | grep -v 'tun' | awk '{print $3}' | head -n1)
   fi
@@ -245,17 +245,23 @@ print(' '.join(ips))
     if [ -n "$ipg" ] && [ -n "$ifaces" ]; then
       ip route add $cip dev $ifaces via $ipg 2>/dev/null || ip route replace $cip dev $ifaces via $ipg 2>/dev/null
     elif [ -n "$ifaces" ]; then
-      ip route add $cip dev $ifaces 2>/dev/null
+      ip route add $cip dev $ifaces 2>/dev/null || ip route replace $cip dev $ifaces 2>/dev/null
     fi
   done
-  for hip in $hostt $hostv 8.8.8.8; do
+  for hip in $hostt $hostv; do
     if [ -n "$hip" ] && [ -n "$ipg" ] && [ -n "$ifaces" ]; then
       ip route add $hip dev $ifaces via $ipg 2>/dev/null || ip route replace $hip dev $ifaces via $ipg 2>/dev/null
+    elif [ -n "$hip" ] && [ -n "$ifaces" ]; then
+      ip route add $hip dev $ifaces 2>/dev/null || ip route replace $hip dev $ifaces 2>/dev/null
     fi
   done
 
-  if [ -n "$ipg" ] && [ -n "$ifaces" ]; then
-    ip route replace default dev $ifaces via $ipg metric 10 2>/dev/null
+  if [ -n "$ifaces" ]; then
+    if [ -n "$ipg" ]; then
+      ip route replace default dev $ifaces via $ipg metric 10 2>/dev/null
+    else
+      ip route replace default dev $ifaces metric 10 2>/dev/null
+    fi
   fi
  }
 
