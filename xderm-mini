@@ -289,6 +289,11 @@ print(' '.join(ips))
     use_go="yes"
   fi
 
+  mkdir -p /dev/net
+  [ ! -c /dev/net/tun ] && mknod /dev/net/tun c 10 200 2>/dev/null
+  modprobe tun 2>/dev/null
+  ip link delete tun0 2>/dev/null || true
+
   if [ "$use_go" == "yes" ]; then
     echo -e "{$(date +%M:%S)} Menjalankan go-tun2socks...." >> screenlog.0
     HOME=/root TERM=xterm screen -dmS gerbang $gopath -loglevel none -proxyServer 127.0.0.1:$sport -proxyType socks -tunName tun0 -tunAddr 10.0.0.2 -tunGw 10.0.0.1 -tunMask 255.255.255.0
