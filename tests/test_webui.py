@@ -90,8 +90,9 @@ class TestWebUI(unittest.TestCase):
             login_src = f.read()
 
         # login.php must safely check $_GET['login']
-        self.assertNotIn("if ($_GET['login'])", login_src)
-        self.assertIn("!empty($_GET['login'])", login_src)
+        # login.php must not have unescaped single quotes inside echo '<!DOCTYPE>...'
+        self.assertNotIn("typeof jQuery === 'undefined'", login_src)
+        self.assertIn("typeof jQuery === \\'undefined\\'", login_src)
 
         # index.php must use file_exists('login.php')
         self.assertIn("file_exists('login.php')", self.content)

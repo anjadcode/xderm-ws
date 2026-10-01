@@ -36,8 +36,8 @@ echo '<!DOCTYPE>
 		<link type="text/css" rel="stylesheet" href="css/style.css" />
 		<script type="text/javascript" src="js/jquery-2.1.3.min.js"></script>
 		<script type="text/javascript">
-		if (typeof jQuery === 'undefined') {
-			document.write('<script type="text/javascript" src="jquery-2.1.3.min.js"><\/script>');
+		if (typeof jQuery === \'undefined\') {
+			document.write(\'<script type="text/javascript" src="jquery-2.1.3.min.js"><\/script>\');
 		}
 		</script></head>
 	<style>
