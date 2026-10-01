@@ -157,6 +157,15 @@ fi
 }
  set_firewall () {
 sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1
+if command -v uci >/dev/null 2>&1; then
+  local wan_idx=$(uci show firewall 2>/dev/null | grep -E "=zone.*name='wan'" | head -n1 | cut -d'[' -f2 | cut -d']' -f1)
+  [ -z "$wan_idx" ] && wan_idx=1
+  if ! uci get firewall.@zone[$wan_idx].device 2>/dev/null | grep -q 'tun0'; then
+    uci add_list firewall.@zone[$wan_idx].device='tun0' 2>/dev/null
+    uci commit firewall 2>/dev/null
+    /etc/init.d/firewall reload 2>/dev/null
+  fi
+fi
 if command -v nft >/dev/null 2>&1; then
   nft delete table inet xderm 2>/dev/null
   nft add table inet xderm 2>/dev/null
@@ -178,6 +187,12 @@ if command -v iptables >/dev/null 2>&1; then
 fi
 }
  flush_firewall () {
+if command -v uci >/dev/null 2>&1; then
+  local wan_idx=$(uci show firewall 2>/dev/null | grep -E "=zone.*name='wan'" | head -n1 | cut -d'[' -f2 | cut -d']' -f1)
+  [ -z "$wan_idx" ] && wan_idx=1
+  uci del_list firewall.@zone[$wan_idx].device='tun0' 2>/dev/null
+  uci commit firewall 2>/dev/null
+fi
 if command -v nft >/dev/null 2>&1; then
   nft delete table inet xderm 2>/dev/null
 fi
