@@ -170,6 +170,16 @@ class TestOpenWrtSimulation(unittest.TestCase):
         decimal_sleeps = re.findall(r'sleep\s+[0-9]+\.[0-9]+', content)
         self.assertEqual(decimal_sleeps, [], f"Found non-integer sleep: {decimal_sleeps}")
 
+    def test_jalankan_tun2socks_parameter_safety(self):
+        """Verify jalankan_tun2socks parses sport and pudp with default fallbacks."""
+        script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'xderm-mini'))
+        with open(script_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        self.assertIn('local sport="${1:-1080}"', content)
+        self.assertIn('local pudp="${2:-7300}"', content)
+        self.assertIn('ip link delete tun0', content)
+
 if __name__ == '__main__':
     unittest.main()
 

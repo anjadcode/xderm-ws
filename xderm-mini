@@ -266,6 +266,11 @@ print(' '.join(ips))
  }
 
  jalankan_tun2socks () {
+  local sport="${1:-1080}"
+  local pudp="${2:-7300}"
+  [ -z "$sport" ] && sport="1080"
+  [ -z "$pudp" ] && pudp="7300"
+
   local badvpn_path="badvpn-tun2socks"
   if [ -x /www/xderm/badvpn-tun2socks ]; then
     badvpn_path="/www/xderm/badvpn-tun2socks"
@@ -340,7 +345,8 @@ print(' '.join(ips))
   fi
  }
  flushx () {
-mkdir -p /www/xderm/log 2>/dev/null
+ ip link delete tun0 2>/dev/null || true
+ mkdir -p /www/xderm/log 2>/dev/null
 echo -e "{$(date +%M:%S)} Membersihkan sisa sisa, Tunggu...." >> screenlog.0
 killall -q sshpass vpn stunnel openvpn
 killall -q trojan v2ray badvpn-tun2socks
