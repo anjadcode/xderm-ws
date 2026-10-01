@@ -293,6 +293,7 @@ killall -q autorekonek automode go-tun2socks
 kill $(ps w|grep python3|grep xderm.py|awk "NR==1"|awk '{print $1}') 2>/dev/null
 kill $(ps w|grep python3|grep xderm_ws.py|awk "NR==1"|awk '{print $1}') 2>/dev/null
 kill $(screen -ls 2>/dev/null|grep injekws|awk -F '.' '{print $1}'|awk '{print $1}') 2>/dev/null
+kill $(screen -ls 2>/dev/null|grep auto|awk -F '.' '{print $1}'|awk '{print $1}') 2>/dev/null
 kill $(ps w|grep badvpn|grep tun|awk "NR==1"|awk '{print $1}') 2>/dev/null
  mode=$(cat /www/xderm/config/mode.default|sed 's/\.//g')
   if [ "$mode" == "SSH" ] || [ "$mode" == "SSH-WS" ]; then
@@ -1191,45 +1192,30 @@ jalankan_tun2socks 1080 "$pudp"
 n=0;echo -ne "{$(date +%M:%S)} Menguji Koneksi... " >> screenlog.0
  while [ $n != 5 ]; do
 r=$(curl -m4 88.198.46.60 -w "%{http_code}" -s -o /dev/null|head -c2)
-  if [ $r -eq 30 ]; then
+  if [ "$r" == "30" ] || [ "$r" == "20" ]; then
    echo '<pre><h2 style="color:#006400" "text-overflow:ellipsis">HTTP/1.1 200 OK</h2></pre>' >> screenlog.0
   if [ -f $(cat /www/xderm/config/firewall|awk "NR==1") ]; then
    echo no > /www/xderm/config/firewall
   fi
-echo -e "{$(date +%M:%S)} Menjalankan Autorc.. (latarbelakang)" >> screenlog.0
-echo "#!/bin/bash
-p=0
+  if [ "$(cat /www/xderm/config/autorekonek 2>/dev/null|awk 'NR==1')" == "yes" ]; then
+    echo -e "{$(date +%M:%S)} Menjalankan Auto-reconnect (latarbelakang)..." >> screenlog.0
+    echo "#!/bin/bash
+sleep 15
 while true; do
- if [ -f \$(ip r|grep $host|awk 'NR==1'|awk '{print \$1}') ]; then
-if [ ! -f \$(ip r|grep 10.|grep default|awk '{print \$1}') ]; then
-route del default dev tun0 2>/dev/null
-fi
-interf=\$(ip r|grep default|awk '{print \$3}'|awk 'NR==1')
-    if [ -f \$interf ]; then
-     sleep 2;continue
-    fi
-  if [ ! -f \$(echo \$interf|awk -F '.' '{print \$2}') ]; then
-   if [ \$(echo \$interf|awk -F '.' '{print \$4}'|wc -c) != \"2\" ]; then
-  ipg=\$(ip r|grep default|awk '{print \$3}');interf=\$(ip r|grep default|awk '{print \$5}')
-  ip route add $host dev \$interf via \$ipg 2>/dev/null
-  ip route add 8.8.8.8 \$interf via \$ipg 2>/dev/null
-  ip route replace default dev \$interf via \$ipg metric 10 2>/dev/null
-  else
-  type=gw;route add $host \$type \$interf 2>/dev/null
-  route add 8.8.8.8 \$type \$interf 2>/dev/null
-  ip route replace default dev \$interf via \$ipg metric 10 2>/dev/null
-   fi
- else
-  type=dev;route add $host \$type \$interf 2>/dev/null
-  route add 8.8.8.8 \$type \$interf 2>/dev/null
-  ip route replace default dev \$interf via \$ipg metric 10 2>/dev/null
+  r=\$(curl -m5 88.198.46.60 -w \"%{http_code}\" -s -o /dev/null 2>/dev/null|head -c2)
+  if [ -z \"\$r\" ] || [ \"\$r\" == \"00\" ]; then
+    r=\$(curl -m5 1.1.1.1 -w \"%{http_code}\" -s -o /dev/null 2>/dev/null|head -c2)
   fi
-ip route replace default via 10.0.0.2 dev tun0 metric 1 2>/dev/null || route add default gw 10.0.0.2 metric 1 2>/dev/null
- fi
-sleep 2
-done" > /tmp/autorekonek;cd /tmp;chmod +x autorekonek
-screen -dmS auto ./autorekonek;sleep 1;rm -rf autorekonek
- n=ok;break
+  if [ \"\$r\" != \"30\" ] && [ \"\$r\" != \"20\" ]; then
+    ip route replace default via 10.0.0.2 dev tun0 metric 1 2>/dev/null || route add default gw 10.0.0.2 metric 1 2>/dev/null
+  fi
+  sleep 10
+done" > /tmp/autorekonek;chmod +x /tmp/autorekonek
+    screen -dmS auto /tmp/autorekonek
+  else
+    echo -e "{$(date +%M:%S)} Auto-reconnect nonaktif." >> screenlog.0
+  fi
+  n=ok;break
   fi
 sleep 1;((n++))
  done
@@ -1374,92 +1360,44 @@ iptables -t nat -I PREROUTING -p udp --dport 53 -j REDIRECT --to-ports 53 2>/dev
 iptables -t nat -I PREROUTING -p tcp --dport 53 -j REDIRECT --to-ports 53 2>/dev/null
 /etc/init.d/https-dns-proxy restart 2>/dev/null
 /etc/init.d/dnsmasq restart 2>/dev/null
-echo -e "{$(date +%M:%S)} Menjalankan rekonek otomatis..." >> screenlog.0
+autorek=$(cat /www/xderm/config/autorekonek 2>/dev/null|awk 'NR==1')
+if [ "$autorek" == "yes" ]; then
+echo -e "{$(date +%M:%S)} Menjalankan Auto-reconnect (latarbelakang)..." >> screenlog.0
 echo "#!/bin/bash
+sleep 15
 p=0
+fail=0
 while true; do
- if [ ! -f \$(ip r|grep $host|awk 'NR==1'|awk '{print \$1}') ]; then
-r=\$(curl -m50 google.com -w \"%{http_code}\" --proxy socks5://127.0.0.1:1080 -s -o /dev/null|head -c2);sleep 2
- else
-r=0
- fi
-  if [ \$r != 30 ]; then
-killall -q sshpass;rm -rf /root/.ssh/known_hosts*;route del default dev tun0 2>/dev/null
-((p++));echo \"         (Jumlah AutoRekonek: \$p)\" > /www/xderm/screenlog.0
-echo \"**********************************************\" >> /www/xderm/screenlog.0
-cat /www/xderm/log/logr.txt|grep binari >> /www/xderm/screenlog.0
-cat /www/xderm/log/logr.txt|grep Mode >> /www/xderm/screenlog.0
-cat /www/xderm/log/logr.txt|grep Inject >> /www/xderm/screenlog.0
-echo \"##############################################\" >> /www/xderm/screenlog.0
-cat /www/xderm/log/logr.txt|grep Host: >> /www/xderm/screenlog.0
-cat /www/xderm/log/logr.txt|grep Port: >> /www/xderm/screenlog.0
-cat /www/xderm/log/logr.txt|grep User: >> /www/xderm/screenlog.0
-cat /www/xderm/log/logr.txt|grep Pass: >> /www/xderm/screenlog.0
-cat /www/xderm/log/logr.txt|grep UDPgw: >> /www/xderm/screenlog.0
-echo \"##############################################\" >> /www/xderm/screenlog.0
-echo -e \"{\$(date +%M:%S)} Koneksi Hilang !! Menunggu Sumber....\" >> /www/xderm/screenlog.0
- while true; do
- if [ -f \$(ip r|grep $host|awk 'NR==1'|awk '{print \$1}') ]; then
-interf=\$(ip r|grep default|awk '{print \$3}'|awk 'NR==1')
-    if [ -f \$interf ]; then
-     sleep 2;continue
-    fi
-  if [ ! -f \$(echo \$interf|awk -F '.' '{print \$2}') ]; then
-   if [ \$(echo \$interf|awk -F '.' '{print \$4}'|wc -c) != \"2\" ]; then
-  ipg=\$(ip r|grep default|awk '{print \$3}');interf=\$(ip r|grep default|awk '{print \$5}')
-  ip route add $host dev \$interf via \$ipg 2>/dev/null
-  ip route add 8.8.8.8 \$interf via \$ipg 2>/dev/null
-  ip route replace default dev \$interf via \$ipg metric 10 2>/dev/null
+  r=\$(curl -m5 88.198.46.60 -w \"%{http_code}\" --proxy socks5://127.0.0.1:1080 -s -o /dev/null 2>/dev/null|head -c2)
+  if [ -z \"\$r\" ] || [ \"\$r\" == \"00\" ]; then
+    r=\$(curl -m5 1.1.1.1 -w \"%{http_code}\" --proxy socks5://127.0.0.1:1080 -s -o /dev/null 2>/dev/null|head -c2)
+  fi
+  if [ \"\$r\" == \"30\" ] || [ \"\$r\" == \"20\" ]; then
+    fail=0
   else
-  type=gw;route add $host \$type \$interf 2>/dev/null
-  route add 8.8.8.8 \$type \$interf 2>/dev/null
-  ip route replace default dev \$interf via \$ipg metric 10 2>/dev/null
-   fi
- else
-  type=dev;route add $host \$type \$interf 2>/dev/null
-  route add 8.8.8.8 \$type \$interf 2>/dev/null
-  ip route replace default dev \$interf via \$ipg metric 10 2>/dev/null
+    ((fail++))
   fi
- else
-  break
- fi
-sleep 2
- done
-echo -e \"{\$(date +%M:%S)} Memperbaiki Koneksi + Routing Ulang.. \" >> /www/xderm/screenlog.0
- if [ $(cat /www/xderm/config/stun) != "no" ]; then
-screen -dmS xdermr sshpass -p \"$pass\" ssh -oTCPKeepAlive=yes -oServerAliveInterval=25 -oServerAliveCountMax=3 -oStrictHostKeyChecking=no -CND 127.0.0.1:1080 -p 8780 $user@localhost;sleep 7
-ip route replace default via 10.0.0.2 dev tun0 metric 1 2>/dev/null || route add default gw 10.0.0.2 metric 1 2>/dev/null;n=0
- while [ \$n != 5 ]; do
-r=\$(curl -m4 88.198.46.60 -w \"%{http_code}\" -s -o /dev/null|head -c2)
-  if [ \$r -eq 30 ]; then
-   echo '<pre><h2 style=\"color:#006400\" \"text-overflow:ellipsis\">HTTP/1.1 200 OK</h2></pre>' >> /www/xderm/screenlog.0
-   n=ok;echo -e \"{\$(date +%M:%S)} Selesai.\" >> /www/xderm/screenlog.0;break
+  if [ \$fail -ge 3 ]; then
+    fail=0
+    ((p++))
+    echo -e \"{\$(date +%M:%S)} Koneksi terputus! Melakukan reconnect ke-\$p...\" >> /www/xderm/screenlog.0
+    killall -q sshpass
+    sleep 2
+    if [ \$(cat /www/xderm/config/stun 2>/dev/null) == \"yes\" ]; then
+      screen -dmS xdermr sshpass -p \"$pass\" ssh -oTCPKeepAlive=yes -oServerAliveInterval=25 -oServerAliveCountMax=3 -oStrictHostKeyChecking=no -CND 127.0.0.1:1080 -p 8780 $user@localhost 2>/dev/null;sleep 7
+    else
+      screen -dmS xdermr sshpass -p \"$pass\" ssh -oTCPKeepAlive=yes -oServerAliveInterval=25 -oServerAliveCountMax=3 -oStrictHostKeyChecking=no -CND 127.0.0.1:1080 -p $port $user@$host -o \"Proxycommand=corkscrew 127.0.0.1 8788 %h %p\" 2>/dev/null;sleep 7
+    fi
+    ip route replace default via 10.0.0.2 dev tun0 metric 1 2>/dev/null || route add default gw 10.0.0.2 metric 1 2>/dev/null
+    echo -e \"{\$(date +%M:%S)} Reconnect selesai.\" >> /www/xderm/screenlog.0
+    sleep 10
   fi
- if [ \$n -eq 4 ]; then
-echo -e \"{\$(date +%M:%S)} Gagal, Mencoba ulang....\" >> /www/xderm/screenlog.0
- fi
-sleep 1;((n++))
- done
+  sleep 10
+done" > /tmp/autorekonek;chmod +x /tmp/autorekonek
+screen -dmS auto /tmp/autorekonek
 else
-screen -dmS xdermr sshpass -p \"$pass\" ssh -oTCPKeepAlive=yes -oServerAliveInterval=25 -oServerAliveCountMax=3 -oStrictHostKeyChecking=no -CND 127.0.0.1:1080 -p $port $user@$host -o \"Proxycommand=corkscrew 127.0.0.1 8788 %h %p\";sleep 7
-screen -dmS xdermr sshpass -p \"$pass\" ssh -oTCPKeepAlive=yes -oServerAliveInterval=25 -oServerAliveCountMax=3 -oStrictHostKeyChecking=no -CND 127.0.0.1:1080 -p $port $user@$host -o \"Proxycommand=corkscrew 127.0.0.1 8789 %h %p\";sleep 7
-ip route replace default via 10.0.0.2 dev tun0 metric 1 2>/dev/null || route add default gw 10.0.0.2 metric 1 2>/dev/null;n=0
- while [ \$n != 5 ]; do
-r=\$(curl -m4 88.198.46.60 -w \"%{http_code}\" -s -o /dev/null|head -c2)
-  if [ \$r -eq 30 ]; then
-   echo '<pre><h2 style=\"color:#006400\" \"text-overflow:ellipsis\">HTTP/1.1 200 OK</h2></pre>' >> /www/xderm/screenlog.0
-   n=ok;echo -e \"{\$(date +%M:%S)} Selesai.\" >> /www/xderm/screenlog.0;break
-  fi
- if [ \$n -eq 4 ]; then
-echo -e \"{\$(date +%M:%S)} Gagal, Mencoba ulang....\" >> /www/xderm/screenlog.0
- fi
-sleep 1;((n++))
- done
- fi
-  fi
-sleep 1
-done" > /tmp/autorekonek;cd /tmp;chmod +x autorekonek
-screen -dmS auto ./autorekonek;sleep 1;rm -rf autorekonek
+echo -e "{$(date +%M:%S)} Auto-reconnect nonaktif." >> screenlog.0
+fi
 elif [ "$mode" == "SSH-WS" ]; then
 host=$(grep host= config.txt|awk -F "=" '{print $2}'|awk '{print $1}')
  if [ -f $host ]; then
@@ -1554,69 +1492,52 @@ iptables -t nat -I PREROUTING -p udp --dport 53 -j REDIRECT --to-ports 53 2>/dev
 iptables -t nat -I PREROUTING -p tcp --dport 53 -j REDIRECT --to-ports 53 2>/dev/null
 /etc/init.d/https-dns-proxy restart 2>/dev/null
 /etc/init.d/dnsmasq restart 2>/dev/null
-echo -e "{$(date +%M:%S)} Menjalankan rekonek otomatis..." >> screenlog.0
+autorek=$(cat /www/xderm/config/autorekonek 2>/dev/null|awk 'NR==1')
+if [ "$autorek" == "yes" ]; then
+echo -e "{$(date +%M:%S)} Menjalankan Auto-reconnect (latarbelakang)..." >> screenlog.0
 echo "#!/bin/bash
+sleep 15
 p=0
+fail=0
 while true; do
- if [ ! -f \$(ip r|grep $host|awk 'NR==1'|awk '{print \$1}') ]; then
-r=\$(curl -m50 google.com -w \"%{http_code}\" --proxy socks5://127.0.0.1:1080 -s -o /dev/null|head -c2);sleep 2
- else
-r=0
- fi
-  if [ \$r != 30 ] && [ \$r != 20 ]; then
-killall -q sshpass;rm -rf /root/.ssh/known_hosts*;route del default dev tun0 2>/dev/null
-((p++));echo \"         (Jumlah AutoRekonek: \$p)\" > /www/xderm/screenlog.0
-echo \"**********************************************\" >> /www/xderm/screenlog.0
-echo -e \"{\$(date +%M:%S)} Koneksi Hilang !! Menunggu Sumber....\" >> /www/xderm/screenlog.0
- while true; do
- if [ -f \$(ip r|grep $host|awk 'NR==1'|awk '{print \$1}') ]; then
-interf=\$(ip r|grep default|awk '{print \$3}'|awk 'NR==1')
-    if [ -f \$interf ]; then
-     sleep 2;continue
-    fi
-  if [ ! -f \$(echo \$interf|awk -F '.' '{print \$2}') ]; then
-   if [ \$(echo \$interf|awk -F '.' '{print \$4}'|wc -c) != \"2\" ]; then
-  ipg=\$(ip r|grep default|awk '{print \$3}');interf=\$(ip r|grep default|awk '{print \$5}')
-  ip route add $host dev \$interf via \$ipg 2>/dev/null
-  ip route add 8.8.8.8 \$interf via \$ipg 2>/dev/null
-  ip route replace default dev \$interf via \$ipg metric 10 2>/dev/null
-  else
-  type=gw;route add $host \$type \$interf 2>/dev/null
-  route add 8.8.8.8 \$type \$interf 2>/dev/null
-  ip route replace default dev \$interf via \$ipg metric 10 2>/dev/null
-   fi
- else
-  type=dev;route add $host \$type \$interf 2>/dev/null
-  route add 8.8.8.8 \$type \$interf 2>/dev/null
-  ip route replace default dev \$interf via \$ipg metric 10 2>/dev/null
+  r=\$(curl -m5 88.198.46.60 -w \"%{http_code}\" --proxy socks5://127.0.0.1:1080 -s -o /dev/null 2>/dev/null|head -c2)
+  if [ -z \"\$r\" ] || [ \"\$r\" == \"00\" ]; then
+    r=\$(curl -m5 1.1.1.1 -w \"%{http_code}\" --proxy socks5://127.0.0.1:1080 -s -o /dev/null 2>/dev/null|head -c2)
   fi
- else
-  break
- fi
-sleep 2
- done
-echo -e \"{\$(date +%M:%S)} Memperbaiki Koneksi + Routing Ulang.. \" >> /www/xderm/screenlog.0
-if ! screen -ls 2>/dev/null | grep -q injekws; then
-  screen -dmS injekws python3 /www/xderm/xderm_ws.py --listen 127.0.0.1 --port 8789 --host \"$host\" --rport \"$port\" --sni \"$sni\" --payload \"$payload\" --log-file /www/xderm/log/ws.log
-  sleep 2
-fi
-screen -dmS xdermr sshpass -p \"$pass\" ssh -oTCPKeepAlive=yes -oServerAliveInterval=25 -oServerAliveCountMax=3 -oStrictHostKeyChecking=no -CND 127.0.0.1:1080 -p $port $user@$host -o \"Proxycommand=corkscrew 127.0.0.1 8789 %h %p\";sleep 7
-ip route replace default via 10.0.0.2 dev tun0 metric 1 2>/dev/null || route add default gw 10.0.0.2 metric 1 2>/dev/null;n=0
- while [ \$n != 5 ]; do
-r=\$(curl -m4 88.198.46.60 -w \"%{http_code}\" -s -o /dev/null|head -c2)
   if [ \"\$r\" == \"30\" ] || [ \"\$r\" == \"20\" ]; then
-   echo '<pre><h2 style=\"color:#006400\" \"text-overflow:ellipsis\">HTTP/1.1 200 OK</h2></pre>' >> /www/xderm/screenlog.0
-   n=ok;echo -e \"{\$(date +%M:%S)} Selesai.\" >> /www/xderm/screenlog.0;break
+    fail=0
+  else
+    ((fail++))
   fi
- if [ \$n -eq 4 ]; then
-echo -e \"{\$(date +%M:%S)} Gagal, Mencoba ulang....\" >> /www/xderm/screenlog.0
- fi
-sleep 1;((n++))
- done
+  if [ \$fail -ge 3 ]; then
+    fail=0
+    ((p++))
+    echo -e \"{\$(date +%M:%S)} Koneksi terputus! Melakukan reconnect ke-\$p...\" >> /www/xderm/screenlog.0
+    killall -q sshpass
+    pkill -f \"Proxycommand=corkscrew.*8789\" 2>/dev/null
+    sleep 2
+    if ! screen -ls 2>/dev/null | grep -q injekws && ! pgrep -f xderm_ws.py >/dev/null; then
+      screen -dmS injekws python3 /www/xderm/xderm_ws.py --listen 127.0.0.1 --port 8789 --host \"$host\" --rport \"$port\" --sni \"$sni\" --payload \"$payload\" --log-file /www/xderm/log/ws.log
+      sleep 2
+    fi
+    if command -v screen >/dev/null 2>&1; then
+      HOME=/root TERM=xterm screen -L -Logfile /www/xderm/log/screenlog.0 -dmS xderm sshpass -p \"$pass\" ssh -oTCPKeepAlive=yes -oServerAliveInterval=25 -oServerAliveCountMax=3 -oStrictHostKeyChecking=no -CND 127.0.0.1:1080 -p $port $user@$host -o \"Proxycommand=corkscrew 127.0.0.1 8789 %h %p\" 2>/dev/null
+    fi
+    sleep 1
+    if ! pgrep -f \"Proxycommand=corkscrew 127.0.0.1 8789\" >/dev/null 2>&1; then
+      nohup sshpass -p \"$pass\" ssh -oTCPKeepAlive=yes -oServerAliveInterval=25 -oServerAliveCountMax=3 -oStrictHostKeyChecking=no -CND 127.0.0.1:1080 -p $port $user@$host -o \"Proxycommand=corkscrew 127.0.0.1 8789 %h %p\" >> /www/xderm/log/screenlog.0 2>&1 &
+    fi
+    sleep 7
+    ip route replace default via 10.0.0.2 dev tun0 metric 1 2>/dev/null || route add default gw 10.0.0.2 metric 1 2>/dev/null
+    echo -e \"{\$(date +%M:%S)} Reconnect selesai.\" >> /www/xderm/screenlog.0
+    sleep 10
   fi
-sleep 1
-done" > /tmp/autorekonek;cd /tmp;chmod +x autorekonek
-screen -dmS auto ./autorekonek;sleep 1;rm -rf autorekonek
+  sleep 10
+done" > /tmp/autorekonek;chmod +x /tmp/autorekonek
+screen -dmS auto /tmp/autorekonek
+else
+echo -e "{$(date +%M:%S)} Auto-reconnect nonaktif." >> screenlog.0
+fi
 fi
 cd /www/xderm/ 2>/dev/null
 sed -i '/binary operator expected/d' screenlog.0

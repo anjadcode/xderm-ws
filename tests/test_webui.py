@@ -123,7 +123,27 @@ class TestWebUI(unittest.TestCase):
         img_file = os.path.join(repo_root, 'img', 'image.png')
         self.assertTrue(os.path.isfile(img_file))
 
+    def test_autorekonek_toggle_and_config(self):
+        """Verify Auto-Reconnect checkbox, config saving, and xderm-mini integration."""
+        self.assertIn('name="use_autorekonek"', self.content)
+        self.assertIn('config/autorekonek', self.content)
+        self.assertIn('$is_autorek', self.content)
+
+        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        autorek_cfg = os.path.join(repo_root, 'config', 'autorekonek')
+        self.assertTrue(os.path.isfile(autorek_cfg))
+        with open(autorek_cfg, 'r') as f:
+            val = f.read().strip()
+        self.assertIn(val, ['yes', 'no'])
+
+        script_path = os.path.join(repo_root, 'xderm-mini')
+        with open(script_path, 'r', encoding='utf-8') as f:
+            script_src = f.read()
+        self.assertIn('config/autorekonek', script_src)
+        self.assertIn('Auto-reconnect nonaktif.', script_src)
+
 if __name__ == '__main__':
     unittest.main()
+
 
 

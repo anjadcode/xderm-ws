@@ -752,6 +752,7 @@ if (file_exists($filename)) {
     $use_gotun = isset($_POST['use_gotun']) ? $_POST['use_gotun'] : 'no';
     $use_restfw = isset($_POST['use_restfw']) ? $_POST['use_restfw'] : 'no';
     $use_waitmodem = isset($_POST['use_waitmodem']) ? $_POST['use_waitmodem'] : 'no';
+    $use_autorekonek = isset($_POST['use_autorekonek']) ? $_POST['use_autorekonek'] : 'no';
     $mode = isset($_POST['mode']) ? $_POST['mode'] : 'SSH-WS.';
 
     $config = str_replace("\r", "", $config);
@@ -772,6 +773,7 @@ if (file_exists($filename)) {
     exec('echo "'.$use_gotun.'" > config/gotun');
     exec('echo "'.$use_restfw.'" > config/firewall');
     exec('echo "'.$use_waitmodem.'" > config/modem');
+    exec('echo "'.$use_autorekonek.'" > config/autorekonek');
     exec('echo "'.$conf.'" > config/default');
     exec('echo "Config telah di update." > loglain.txt');
     exec('echo "\''.$conf.'\' Menjadi default Config. !" >> loglain.txt');
@@ -947,6 +949,8 @@ mode=SSH-WS.
     $is_restfw = (!empty($restfw[0]) && trim($restfw[0]) === "yes");
     exec("cat config/modem 2>/dev/null", $modem);
     $is_modem = (!empty($modem[0]) && trim($modem[0]) === "yes");
+    exec("cat config/autorekonek 2>/dev/null", $autorek);
+    $is_autorek = (!empty($autorek[0]) && trim($autorek[0]) === "yes");
     exec("cat /etc/rc.local 2>/dev/null|grep xderm|grep button|awk '{print $2}'|awk 'NR==1'", $boot);
     $is_boot = !empty($boot[0]);
 
@@ -956,6 +960,7 @@ mode=SSH-WS.
             <label><input type="checkbox" name="use_restfw" value="yes" ' . ($is_restfw ? 'checked' : '') . '> Restart Firewall</label>
             <label><input type="checkbox" name="use_waitmodem" value="yes" ' . ($is_modem ? 'checked' : '') . '> Waiting Modem</label>
             <label><input type="checkbox" name="use_boot" value="yes" ' . ($is_boot ? 'checked' : '') . '> Auto ON-Boot</label>
+            <label><input type="checkbox" name="use_autorekonek" value="yes" ' . ($is_autorek ? 'checked' : '') . '> Auto-Reconnect</label>
           </div>';
 
     echo '<input type="submit" name="simpan" class="btn" style="width:100%; background:#059669; color:#fff; padding:10px; font-size:14px; margin-top:8px;" value="Simpan Konfigurasi"/>';
