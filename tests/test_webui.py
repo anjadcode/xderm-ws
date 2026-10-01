@@ -37,7 +37,9 @@ class TestWebUI(unittest.TestCase):
         self.assertIn('id="chk_autoscroll"', self.content)
         self.assertIn('id="tab_log_sys"', self.content)
         self.assertIn('id="tab_log_ws"', self.content)
+        self.assertIn('id="tab_log_tun"', self.content)
         self.assertIn("['action'] === 'clear_ws_log'", self.content)
+        self.assertIn("['action'] === 'clear_tun_log'", self.content)
 
     def test_webui_ping_latency_indicator(self):
         """Verify real-time ping latency badge and AJAX endpoint exist."""

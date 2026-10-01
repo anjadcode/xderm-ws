@@ -39,6 +39,14 @@
     exit;
   }
 
+  // AJAX handler for clearing Tun log
+  if (isset($_POST['action']) && $_POST['action'] === 'clear_tun_log') {
+    exec("echo > log/tun2socks.log 2>/dev/null");
+    exec("chmod 666 log/tun2socks.log 2>/dev/null");
+    echo "OK";
+    exit;
+  }
+
   // AJAX handler for getting real-time logs
   if ((isset($_GET['action']) && $_GET['action'] === 'get_log') || (isset($_POST['action']) && $_POST['action'] === 'get_log')) {
     header('Content-Type: text/plain; charset=UTF-8');
@@ -51,6 +59,8 @@
       readfile('/www/xderm/screenlog.0');
     } else if ($type === 'ws' && file_exists('/www/xderm/log/ws.log')) {
       readfile('/www/xderm/log/ws.log');
+    } else if ($type === 'tun' && file_exists('/www/xderm/log/tun2socks.log')) {
+      readfile('/www/xderm/log/tun2socks.log');
     } else {
       echo "";
     }
@@ -101,6 +111,7 @@
             <div style="display:flex; gap:4px;">
               <button type="button" id="tab_log_sys" class="tab-btn active" style="padding:2px 8px; font-size:11px;" onclick="switchLogTab(\'sys\')">Log Sistem</button>
               <button type="button" id="tab_log_ws" class="tab-btn" style="padding:2px 8px; font-size:11px;" onclick="switchLogTab(\'ws\')">Log WS Engine</button>
+              <button type="button" id="tab_log_tun" class="tab-btn" style="padding:2px 8px; font-size:11px;" onclick="switchLogTab(\'tun\')">Log Tun2socks</button>
             </div>
             <div style="display:flex; align-items:center; gap:6px;">
               <label style="font-size:11px; color:#9ca3af; display:flex; align-items:center; gap:3px; cursor:pointer;">
@@ -456,18 +467,16 @@ var activeLogTab = "sys";
 
 function switchLogTab(tab) {
   activeLogTab = tab;
-  if (tab === "sys") {
-    $("#tab_log_sys").addClass("active");
-    $("#tab_log_ws").removeClass("active");
-  } else {
-    $("#tab_log_sys").removeClass("active");
-    $("#tab_log_ws").addClass("active");
-  }
+  $("#tab_log_sys").toggleClass("active", tab === 'sys');
+  $("#tab_log_ws").toggleClass("active", tab === 'ws');
+  $("#tab_log_tun").toggleClass("active", tab === 'tun');
   fetchActiveLog();
 }
 
 function clearLog() {
-  var act = (activeLogTab === "ws") ? "clear_ws_log" : "clear_log";
+  var act = "clear_log";
+  if (activeLogTab === "ws") act = "clear_ws_log";
+  else if (activeLogTab === "tun") act = "clear_tun_log";
   $.post("index.php", { action: act }, function() {
     if (document.getElementById("log")) document.getElementById("log").innerHTML = "";
     if (document.getElementById("loglain")) document.getElementById("loglain").innerHTML = "";

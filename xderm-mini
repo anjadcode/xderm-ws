@@ -289,36 +289,54 @@ print(' '.join(ips))
     use_go="yes"
   fi
 
-  mkdir -p /dev/net
+  mkdir -p /dev/net /www/xderm/log 2>/dev/null
   [ ! -c /dev/net/tun ] && mknod /dev/net/tun c 10 200 2>/dev/null
   modprobe tun 2>/dev/null
   ip link delete tun0 2>/dev/null || true
 
   if [ "$use_go" == "yes" ]; then
-    echo -e "{$(date +%M:%S)} Menjalankan go-tun2socks...." >> screenlog.0
+    echo -e "{$(date +%M:%S)} [TUN2SOCKS] Menjalankan go-tun2socks...." >> screenlog.0
+    echo -e "         • Binary : $gopath" >> screenlog.0
+    echo -e "         • Port   : 127.0.0.1:$sport -> Dev: tun0 (10.0.0.2)" >> screenlog.0
     HOME=/root TERM=xterm screen -dmS gerbang $gopath -loglevel none -proxyServer 127.0.0.1:$sport -proxyType socks -tunName tun0 -tunAddr 10.0.0.2 -tunGw 10.0.0.1 -tunMask 255.255.255.0
     sleep 1
     if ! pgrep -f "$gopath.*tun0" >/dev/null 2>&1 && ! pgrep -f "tun2socks.*tun0" >/dev/null 2>&1; then
       nohup $gopath -loglevel none -proxyServer 127.0.0.1:$sport -proxyType socks -tunName tun0 -tunAddr 10.0.0.2 -tunGw 10.0.0.1 -tunMask 255.255.255.0 > /www/xderm/log/tun2socks.log 2>&1 &
     fi
   else
-    echo -e "{$(date +%M:%S)} Menjalankan badvpn-tun2socks...." >> screenlog.0
-    HOME=/root TERM=xterm screen -dmS gerbang $badvpn_path --tundev tun0 --netif-ipaddr 10.0.0.2 --netif-netmask 255.255.255.0 --socks-server-addr 127.0.0.1:$sport --udpgw-remote-server-addr 127.0.0.1:$pudp --udpgw-transparent-dns --loglevel 0
+    echo -e "{$(date +%M:%S)} [TUN2SOCKS] Menjalankan badvpn-tun2socks...." >> screenlog.0
+    echo -e "         • Binary : $badvpn_path" >> screenlog.0
+    echo -e "         • SOCKS5 : 127.0.0.1:$sport | UDPgw: $pudp" >> screenlog.0
+    HOME=/root TERM=xterm screen -dmS gerbang $badvpn_path --tundev tun0 --netif-ipaddr 10.0.0.2 --netif-netmask 255.255.255.0 --socks-server-addr 127.0.0.1:$sport --udpgw-remote-server-addr 127.0.0.1:$pudp --udpgw-transparent-dns --loglevel 2
     sleep 1
     if ! pgrep -f "$badvpn_path.*tun0" >/dev/null 2>&1 && ! pgrep -f "badvpn-tun2socks.*tun0" >/dev/null 2>&1; then
-      nohup $badvpn_path --tundev tun0 --netif-ipaddr 10.0.0.2 --netif-netmask 255.255.255.0 --socks-server-addr 127.0.0.1:$sport --udpgw-remote-server-addr 127.0.0.1:$pudp --udpgw-transparent-dns --loglevel 0 > /www/xderm/log/tun2socks.log 2>&1 &
+      nohup $badvpn_path --tundev tun0 --netif-ipaddr 10.0.0.2 --netif-netmask 255.255.255.0 --socks-server-addr 127.0.0.1:$sport --udpgw-remote-server-addr 127.0.0.1:$pudp --udpgw-transparent-dns --loglevel 2 > /www/xderm/log/tun2socks.log 2>&1 &
     fi
   fi
   sleep 2
+
+  local bpid=$(pgrep -f "tun2socks.*tun0" | head -n1)
+  if [ -n "$bpid" ]; then
+    echo -e "{$(date +%M:%S)} [TUN2SOCKS] Berjalan normal [PID: $bpid]." >> screenlog.0
+  else
+    echo -e "{$(date +%M:%S)} [PERINGATAN] Proses tun2socks tidak terdeteksi!" >> screenlog.0
+    if [ -s /www/xderm/log/tun2socks.log ]; then
+      echo -e "         • Error: $(tail -n1 /www/xderm/log/tun2socks.log)" >> screenlog.0
+    fi
+  fi
 
   ifconfig tun0 10.0.0.1 netmask 255.255.255.0 up 2>/dev/null || true
   ip addr add 10.0.0.1/24 dev tun0 2>/dev/null || true
   ip link set dev tun0 up 2>/dev/null || true
   if ip link show tun0 >/dev/null 2>&1; then
-    echo -e "{$(date +%M:%S)} Routing Host, IP Gateway dan dns.." >> screenlog.0
+    local tun_ip=$(ip -4 addr show tun0 2>/dev/null | grep -o 'inet [0-9.]*' | awk '{print $2}')
+    echo -e "{$(date +%M:%S)} [INTERFACE] Interface tun0 AKTIF [IP: ${tun_ip:-10.0.0.1}]." >> screenlog.0
+    echo -e "{$(date +%M:%S)} [ROUTING] Mengalihkan rute default via tun0..." >> screenlog.0
     ip route replace default via 10.0.0.2 dev tun0 metric 1 onlink 2>/dev/null || ip route replace default via 10.0.0.2 dev tun0 metric 1 2>/dev/null || route add default gw 10.0.0.2 metric 1 2>/dev/null
+    local gw_cur=$(ip route show default 2>/dev/null | grep tun0 | head -n1)
+    echo -e "         • Rute Aktif: ${gw_cur:-default via 10.0.0.2 dev tun0 metric 1}" >> screenlog.0
   else
-    echo -e "{$(date +%M:%S)} Gagal mengaktifkan tun0! Tetap menggunakan rute WAN fisik." >> screenlog.0
+    echo -e "{$(date +%M:%S)} [ERROR] Gagal mengaktifkan tun0! Tetap menggunakan rute WAN fisik." >> screenlog.0
   fi
  }
  flushx () {
