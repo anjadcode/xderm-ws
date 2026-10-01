@@ -157,10 +157,32 @@ fi
 }
  set_firewall () {
 sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1
+# 1. Otomatis hentikan Passwall jika sedang aktif agar tidak membajak paket
+if /etc/init.d/passwall status 2>/dev/null | grep -qi "running" || pgrep -f "xray.*passwall" >/dev/null 2>&1 || (command -v nft >/dev/null 2>&1 && nft list tables 2>/dev/null | grep -q "passwall"); then
+  echo -e "{$(date +%M:%S)} [PASSWALL] Menonaktifkan Passwall agar tidak bentrok..." >> screenlog.0
+  /etc/init.d/passwall stop >/dev/null 2>&1
+  /etc/init.d/passwall disable >/dev/null 2>&1
+fi
+
+# 2. Otomatis konfigurasi DNS ke DoH (https-dns-proxy 127.0.0.1#5053)
+if command -v uci >/dev/null 2>&1; then
+  local cur_dns=$(uci get dhcp.@dnsmasq[0].server 2>/dev/null)
+  if ! echo "$cur_dns" | grep -q "127.0.0.1#5053"; then
+    echo -e "{$(date +%M:%S)} [DNS] Mengalihkan dnsmasq ke DoH (127.0.0.1#5053)..." >> screenlog.0
+    uci delete dhcp.@dnsmasq[0].server 2>/dev/null
+    uci add_list dhcp.@dnsmasq[0].server="127.0.0.1#5053"
+    uci commit dhcp 2>/dev/null
+  fi
+fi
+/etc/init.d/https-dns-proxy restart >/dev/null 2>&1
+/etc/init.d/dnsmasq restart >/dev/null 2>&1
+
+# 3. Otomatis daftarkan tun0 ke Zona WAN OpenWrt untuk Forwarding WiFi & NAT Masquerade
 if command -v uci >/dev/null 2>&1; then
   local wan_idx=$(uci show firewall 2>/dev/null | grep -E "=zone.*name='wan'" | head -n1 | cut -d'[' -f2 | cut -d']' -f1)
   [ -z "$wan_idx" ] && wan_idx=1
   if ! uci get firewall.@zone[$wan_idx].device 2>/dev/null | grep -q 'tun0'; then
+    echo -e "{$(date +%M:%S)} [FIREWALL] Mendaftarkan tun0 ke Zona WAN OpenWrt..." >> screenlog.0
     uci add_list firewall.@zone[$wan_idx].device='tun0' 2>/dev/null
     uci commit firewall 2>/dev/null
     /etc/init.d/firewall reload 2>/dev/null
@@ -355,6 +377,7 @@ print(' '.join(ips))
     ip route replace default via 10.0.0.2 dev tun0 metric 1 onlink 2>/dev/null || ip route replace default via 10.0.0.2 dev tun0 metric 1 2>/dev/null || route add default gw 10.0.0.2 metric 1 2>/dev/null
     local gw_cur=$(ip route show default 2>/dev/null | grep tun0 | head -n1)
     echo -e "         • Rute Aktif: ${gw_cur:-default via 10.0.0.2 dev tun0 metric 1}" >> screenlog.0
+    set_firewall
   else
     echo -e "{$(date +%M:%S)} [ERROR] Gagal mengaktifkan tun0! Tetap menggunakan rute WAN fisik." >> screenlog.0
   fi
