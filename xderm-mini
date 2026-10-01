@@ -156,6 +156,7 @@ if [ -n "$WSSCRIPT" ]; then
 fi
 }
  set_firewall () {
+sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1
 if command -v nft >/dev/null 2>&1; then
   nft delete table inet xderm 2>/dev/null
   nft add table inet xderm 2>/dev/null
@@ -164,11 +165,16 @@ if command -v nft >/dev/null 2>&1; then
   nft 'add chain inet xderm prerouting { type nat hook prerouting priority dstnat; policy accept; }' 2>/dev/null
   nft 'add rule inet xderm prerouting meta l4proto udp th dport 53 redirect to :53' 2>/dev/null
   nft 'add rule inet xderm prerouting meta l4proto tcp th dport 53 redirect to :53' 2>/dev/null
+  nft 'add chain inet xderm forward { type filter hook forward priority filter; policy accept; }' 2>/dev/null
+  nft 'add rule inet xderm forward oifname "tun0" accept' 2>/dev/null
+  nft 'add rule inet xderm forward iifname "tun0" accept' 2>/dev/null
 fi
 if command -v iptables >/dev/null 2>&1; then
   iptables -t nat -A POSTROUTING -o tun0 -j MASQUERADE 2>/dev/null
   iptables -t nat -I PREROUTING -p udp --dport 53 -j REDIRECT --to-ports 53 2>/dev/null
   iptables -t nat -I PREROUTING -p tcp --dport 53 -j REDIRECT --to-ports 53 2>/dev/null
+  iptables -I FORWARD -o tun0 -j ACCEPT 2>/dev/null
+  iptables -I FORWARD -i tun0 -j ACCEPT 2>/dev/null
 fi
 }
  flush_firewall () {
@@ -179,6 +185,8 @@ if command -v iptables >/dev/null 2>&1; then
   iptables -t nat -D POSTROUTING -o tun0 -j MASQUERADE 2>/dev/null
   iptables -t nat -D PREROUTING -p udp --dport 53 -j REDIRECT --to-ports 53 2>/dev/null
   iptables -t nat -D PREROUTING -p tcp --dport 53 -j REDIRECT --to-ports 53 2>/dev/null
+  iptables -D FORWARD -o tun0 -j ACCEPT 2>/dev/null
+  iptables -D FORWARD -i tun0 -j ACCEPT 2>/dev/null
 fi
 }
  routing () {
@@ -276,10 +284,12 @@ print(' '.join(ips))
   fi
   sleep 2
 
-  ifconfig tun0 10.0.0.1 netmask 255.255.255.0 up 2>/dev/null
+  ifconfig tun0 10.0.0.1 netmask 255.255.255.0 up 2>/dev/null || true
+  ip addr add 10.0.0.1/24 dev tun0 2>/dev/null || true
+  ip link set dev tun0 up 2>/dev/null || true
   if ip link show tun0 >/dev/null 2>&1; then
     echo -e "{$(date +%M:%S)} Routing Host, IP Gateway dan dns.." >> screenlog.0
-    ip route replace default via 10.0.0.2 dev tun0 metric 1 2>/dev/null || route add default gw 10.0.0.2 metric 1 2>/dev/null
+    ip route replace default via 10.0.0.2 dev tun0 metric 1 onlink 2>/dev/null || ip route replace default via 10.0.0.2 dev tun0 metric 1 2>/dev/null || route add default gw 10.0.0.2 metric 1 2>/dev/null
   else
     echo -e "{$(date +%M:%S)} Gagal mengaktifkan tun0! Tetap menggunakan rute WAN fisik." >> screenlog.0
   fi
